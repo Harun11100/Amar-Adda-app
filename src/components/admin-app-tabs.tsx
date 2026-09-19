@@ -25,47 +25,47 @@ export default function AppTabs() {
       {/* Dashboard */}
       <NativeTabs.Trigger name="index">
         <NativeTabs.Trigger.Label>
-          Home
+          Dashboard
         </NativeTabs.Trigger.Label>
 
         <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/home.png')}
+          src={require('@/assets/images/tabIcons/dashboard.png')}
           renderingMode="template"
         />
       </NativeTabs.Trigger>
 
       {/* Orders */}
-      <NativeTabs.Trigger name="order">
+      <NativeTabs.Trigger name="createFoodItem">
         <NativeTabs.Trigger.Label>
-          Orders
+          Upload Food
         </NativeTabs.Trigger.Label>
 
         <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/order.png')}
+          src={require('@/assets/images/tabIcons/food.png')}
           renderingMode="template"
         />
       </NativeTabs.Trigger>
 
       {/* Kitchen */}
-      <NativeTabs.Trigger name="kitchen">
+      <NativeTabs.Trigger name="addCategory">
         <NativeTabs.Trigger.Label>
-          Kitchen
+          Add Category
         </NativeTabs.Trigger.Label>
 
         <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/kitchen.png')}
+          src={require('@/assets/images/tabIcons/category.png')}
           renderingMode="template"
         />
       </NativeTabs.Trigger>
 
       {/* Cash Counter */}
-      <NativeTabs.Trigger name="cash-counter">
+      <NativeTabs.Trigger name="stuff-list">
         <NativeTabs.Trigger.Label>
-          Cash Counter
+          Staff List
         </NativeTabs.Trigger.Label>
 
         <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/cash-counter.png')}
+          src={require('@/assets/images/tabIcons/staff.png')}
           renderingMode="template"
         />
       </NativeTabs.Trigger>
