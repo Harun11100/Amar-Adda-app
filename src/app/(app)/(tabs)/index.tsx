@@ -34,7 +34,7 @@ import {
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
-
+import AsyncStorage from '@react-native-async-storage/async-storage';
 const { width } = Dimensions.get('window');
 
 const API_URL = Constants.expoConfig?.extra?.API_URL;
@@ -111,11 +111,25 @@ export default function HomeScreen() {
   const [foods, setFoods] = useState<Food[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
-
+  const [userData, setUserData]=useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+   useEffect(() => {
+    const loadUserData = async () => {
+      try {
+        const storedUser = await AsyncStorage.getItem('loggedInUser');
+        if (storedUser) {
+          const parsedData = JSON.parse(storedUser);
+          setUserData(parsedData);
+        }
+      } catch (error) {
+        console.error('Failed to load user data from AsyncStorage:', error);
+      }
+    };
 
+    loadUserData();
+  }, []);
   /*
    * ============================
    * FETCH FOOD ITEMS
@@ -333,6 +347,8 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.headerActions}>
+            {
+              userData.role === "admin" && (
             <TouchableOpacity
               style={styles.adminDashboardButton}
               activeOpacity={0.75}
@@ -345,6 +361,9 @@ export default function HomeScreen() {
                 color={COLORS.white}
               />
             </TouchableOpacity>
+              )
+            }
+        
 
             <TouchableOpacity
               style={styles.profileButton}

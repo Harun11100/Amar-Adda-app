@@ -41,6 +41,7 @@ const COLORS = {
 };
 
 const API_URL = Constants.expoConfig?.extra?.API_URL;
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type SalesData = {
   date: string;
@@ -51,10 +52,26 @@ export default function AdminDashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadingSales, setLoadingSales] = useState(true);
   const [salesError, setSalesError] = useState('');
+  const [userData, setUserData] = useState<any>(null);
   const [sales, setSales] = useState<SalesData>({
     date: '',
     totalSales: 0,
   });
+   useEffect(() => {
+      const loadUserData = async () => {
+        try {
+          const storedUser = await AsyncStorage.getItem('loggedInUser');
+          if (storedUser) {
+            const parsedData = JSON.parse(storedUser);
+            setUserData(parsedData);
+          }
+        } catch (error) {
+          console.error('Failed to load user data from AsyncStorage:', error);
+        }
+      };
+  
+      loadUserData();
+    }, []);
 
   const fetchTodaySales = useCallback(async () => {
     try {
@@ -131,6 +148,7 @@ export default function AdminDashboardScreen() {
 
       <View style={styles.header}>
         <View style={styles.headerLeft}>
+          
           <View style={styles.adminBadgeIcon}>
             <ShieldCheck size={18} color="#FFF" />
           </View>
