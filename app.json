@@ -17,7 +17,8 @@
         "backgroundImage": "./assets/images/icon.png",
         "monochromeImage": "./assets/images/icon.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.mdharun.amaradda"
     },
     "web": {
       "output": "static",
@@ -38,10 +39,12 @@
       "typedRoutes": true,
       "reactCompiler": true
     },
-     "extra": {
+    "extra": {
       "API_URL": "https://amar-adda-restaurant.vercel.app/",
-      "router": {}
-     
+      "router": {},
+      "eas": {
+        "projectId": "542013c8-f786-43c0-8ab0-c4961ae1960e"
+      }
     }
   }
 }
