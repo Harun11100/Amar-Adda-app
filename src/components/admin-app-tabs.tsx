@@ -44,7 +44,19 @@ export default function AppTabs() {
           src={require('@/assets/images/tabIcons/food.png')}
           renderingMode="template"
         />
+
       </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="createVariant">
+        <NativeTabs.Trigger.Label>
+          Upload Variant
+        </NativeTabs.Trigger.Label>
+
+        <NativeTabs.Trigger.Icon
+          src={require('@/assets/images/tabIcons/food.png')}
+          renderingMode="template"
+        />
+      </NativeTabs.Trigger>
+
 
       {/* Kitchen */}
       <NativeTabs.Trigger name="addCategory">

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -18,6 +18,7 @@ import {
   ShieldCheck,
 } from 'lucide-react-native';
 import { router } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const COLORS = {
   primary: '#0B3C29',
@@ -31,11 +32,45 @@ const COLORS = {
   dangerLight: '#FDF2F2',
 };
 
+type StaffProfile = {
+  name: string;
+  email: string;
+  phone: string;
+  role: string;
+  status: string;
+  staffId?: string;
+  avatar?: string;
+};
+
 export default function StaffProfileScreen() {
-  const handleLogout = () => {
-    // Clear authentication/session here if you have a store.
-    router.replace('/stuffLogin');
+  const [profile, setProfile] = useState<StaffProfile | null>(null);
+
+  useEffect(() => {
+    const loadUserData = async () => {
+      try {
+        const storedUser = await AsyncStorage.getItem('loggedInUser');
+        if (storedUser) {
+          const parsedData = JSON.parse(storedUser);
+          setProfile(parsedData);
+        }
+      } catch (error) {
+        console.error('Failed to load user data from AsyncStorage:', error);
+      }
+    };
+
+    loadUserData();
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      await AsyncStorage.removeItem('loggedInUser');
+    } catch (error) {
+      console.error('Failed to clear AsyncStorage on logout:', error);
+    }
+    router.push('/stuffLogin');
   };
+
+  const isOnline = profile?.status?.toLowerCase() === 'active' || profile?.status === 'online';
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -56,7 +91,6 @@ export default function StaffProfileScreen() {
 
         <Text style={styles.headerTitle}>Staff Profile</Text>
 
-        {/* Balance the header */}
         <View style={styles.headerButtonPlaceholder} />
       </View>
 
@@ -70,15 +104,22 @@ export default function StaffProfileScreen() {
           <View style={styles.avatarWrapper}>
             <Image
               source={{
-                uri: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=400&auto=format&fit=crop',
+                uri:
+                  profile?.avatar ||
+                  'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=400&auto=format&fit=crop',
               }}
               style={styles.avatarImage}
             />
 
-            <View style={styles.onlineIndicator} />
+            <View
+              style={[
+                styles.onlineIndicator,
+                { backgroundColor: isOnline ? '#22C55E' : '#9CA3AF' },
+              ]}
+            />
           </View>
 
-          <Text style={styles.staffName}>Harun Rashid</Text>
+          <Text style={styles.staffName}>{profile?.name || 'Staff Member'}</Text>
 
           <View style={styles.rolePill}>
             <ShieldCheck
@@ -87,7 +128,7 @@ export default function StaffProfileScreen() {
             />
 
             <Text style={styles.roleText}>
-              Senior Waiter / Staff
+              {profile?.role || 'Staff / Waiter'}
             </Text>
           </View>
         </View>
@@ -107,20 +148,22 @@ export default function StaffProfileScreen() {
             </View>
           </View>
 
-          {/* Staff ID */}
-          <View style={styles.infoRow}>
-            <View style={styles.iconBox}>
-              <BadgeInfo
-                size={18}
-                color={COLORS.primary}
-              />
-            </View>
+          {/* Staff ID if available */}
+          {profile?.staffId ? (
+            <View style={styles.infoRow}>
+              <View style={styles.iconBox}>
+                <BadgeInfo
+                  size={18}
+                  color={COLORS.primary}
+                />
+              </View>
 
-            <View style={styles.infoContent}>
-              <Text style={styles.infoTitle}>Staff ID</Text>
-              <Text style={styles.infoValue}>STF-92041</Text>
+              <View style={styles.infoContent}>
+                <Text style={styles.infoTitle}>Staff ID</Text>
+                <Text style={styles.infoValue}>{profile.staffId}</Text>
+              </View>
             </View>
-          </View>
+          ) : null}
 
           {/* Email */}
           <View style={styles.infoRow}>
@@ -141,7 +184,7 @@ export default function StaffProfileScreen() {
                 numberOfLines={1}
                 ellipsizeMode="tail"
               >
-                harun.staff@amaradda.com
+                {profile?.email || 'N/A'}
               </Text>
             </View>
           </View>
@@ -161,7 +204,7 @@ export default function StaffProfileScreen() {
               </Text>
 
               <Text style={styles.infoValue}>
-                +880 1712-345678
+                {profile?.phone || 'N/A'}
               </Text>
             </View>
           </View>
@@ -282,7 +325,6 @@ const styles = StyleSheet.create({
     width: 17,
     height: 17,
     borderRadius: 9,
-    backgroundColor: '#22C55E',
     borderWidth: 3,
     borderColor: COLORS.card,
   },

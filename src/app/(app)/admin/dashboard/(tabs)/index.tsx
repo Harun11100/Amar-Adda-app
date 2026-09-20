@@ -60,7 +60,7 @@ export default function AdminDashboardScreen() {
     try {
       setSalesError('');
 
-      const response = await fetch(`${API_URL}/api/sales/today`);
+      const response = await fetch(`${API_URL}/api/admin/sales/today`);
 
       const data = await response.json();
 

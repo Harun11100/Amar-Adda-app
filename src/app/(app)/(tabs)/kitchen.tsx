@@ -1,4 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   StyleSheet,
   Text,
@@ -8,6 +13,7 @@ import {
   StatusBar,
   ActivityIndicator,
   Alert,
+  RefreshControl,
 } from "react-native";
 import {
   ChefHat,
@@ -23,26 +29,29 @@ import Constants from "expo-constants";
 
 const API_URL = Constants.expoConfig?.extra?.API_URL;
 
+// ============================================================
+// TYPES
+// ============================================================
+
 type OrderStatus =
   | "pending"
   | "preparing"
-  | "ready"
   | "completed"
   | "cancelled";
 
+type OrderVariant = {
+  id?: string | null;
+  name?: string | null;
+  price?: number | null;
+};
+
 type OrderItem = {
-  food: string;
+  food: string | null;
   name: string;
   quantity: number;
   price: number;
+  variant?: OrderVariant | null;
   customizations?: string;
-};
-
-type Staff = {
-  _id?: string;
-  id?: string;
-  name?: string;
-  email?: string;
 };
 
 type Order = {
@@ -57,7 +66,10 @@ type Order = {
 
   items: OrderItem[];
 
-  orderType: "dine-in" | "takeaway" | "delivery";
+  orderType:
+    | "dine-in"
+    | "takeaway"
+    | "delivery";
 
   tableNumber: string | null;
 
@@ -68,7 +80,10 @@ type Order = {
 
   orderStatus: OrderStatus;
 
-  paymentStatus: "unpaid" | "paid" | "refunded";
+  paymentStatus:
+    | "unpaid"
+    | "paid"
+    | "refunded";
 
   paymentMethod:
     | "cash"
@@ -77,7 +92,9 @@ type Order = {
     | "online"
     | "due";
 
-  staff?: Staff | string | null;
+  staffName?: string;
+
+  staff?: string | null;
 
   notes: string;
 
@@ -85,20 +102,39 @@ type Order = {
   updatedAt: string;
 };
 
+// ============================================================
+// FILTER TABS
+// ============================================================
+
 const filterTabs: {
   label: string;
-  value: "all" | OrderStatus;
+  value: "pending" | OrderStatus;
 }[] = [
-  { label: "All", value: "all" },
-  { label: "Pending", value: "pending" },
-  { label: "Preparing", value: "preparing" },
-  { label: "Ready", value: "ready" },
-  { label: "Completed", value: "completed" },
-  { label: "Cancelled", value: "cancelled" },
+ 
+  {
+    label: "Pending",
+    value: "pending",
+  },
+  {
+    label: "Preparing",
+    value: "preparing",
+  },
+  {
+    label: "Cancelled",
+    value: "cancelled",
+  },
 ];
 
-const formatOrderTime = (dateString: string) => {
-  if (!dateString) return "";
+// ============================================================
+// FORMAT ORDER TIME
+// ============================================================
+
+const formatOrderTime = (
+  dateString: string
+) => {
+  if (!dateString) {
+    return "";
+  }
 
   const date = new Date(dateString);
 
@@ -112,16 +148,19 @@ const formatOrderTime = (dateString: string) => {
   });
 };
 
-const getStatusLabel = (status: OrderStatus) => {
+// ============================================================
+// STATUS LABEL
+// ============================================================
+
+const getStatusLabel = (
+  status: OrderStatus
+) => {
   switch (status) {
     case "pending":
       return "Pending";
 
     case "preparing":
       return "Preparing";
-
-    case "ready":
-      return "Ready";
 
     case "completed":
       return "Completed";
@@ -134,6 +173,10 @@ const getStatusLabel = (status: OrderStatus) => {
   }
 };
 
+// ============================================================
+// NEXT STATUS
+// ============================================================
+
 const getNextStatus = (
   currentStatus: OrderStatus
 ): OrderStatus | null => {
@@ -142,15 +185,16 @@ const getNextStatus = (
       return "preparing";
 
     case "preparing":
-      return "ready";
-
-    case "ready":
       return "completed";
 
     default:
       return null;
   }
 };
+
+// ============================================================
+// NEXT ACTION LABEL
+// ============================================================
 
 const getNextActionLabel = (
   currentStatus: OrderStatus
@@ -160,9 +204,6 @@ const getNextActionLabel = (
       return "Start Preparing";
 
     case "preparing":
-      return "Mark as Ready";
-
-    case "ready":
       return "Mark Completed";
 
     default:
@@ -170,11 +211,18 @@ const getNextActionLabel = (
   }
 };
 
-export default function KitchenScreen() {
-  const [orders, setOrders] = useState<Order[]>([]);
+// ============================================================
+// KITCHEN SCREEN
+// ============================================================
 
-  const [selectedFilter, setSelectedFilter] =
-    useState<"all" | OrderStatus>("all");
+export default function KitchenScreen() {
+  const [orders, setOrders] =
+    useState<Order[]>([]);
+
+  const [
+    selectedFilter,
+    setSelectedFilter,
+  ] = useState<"pending" | OrderStatus>("pending");
 
   const [isLoading, setIsLoading] =
     useState(true);
@@ -182,23 +230,38 @@ export default function KitchenScreen() {
   const [isRefreshing, setIsRefreshing] =
     useState(false);
 
-  const [updatingOrderId, setUpdatingOrderId] =
-    useState<string | null>(null);
+  const [
+    updatingOrderId,
+    setUpdatingOrderId,
+  ] = useState<string | null>(null);
 
-  /**
-   * Fetch orders from API
-   */
+  // ==========================================================
+  // FETCH ORDERS
+  // ==========================================================
+
   const fetchOrders = useCallback(
     async (refresh = false) => {
-      try {
-        if (refresh) {
-          setIsRefreshing(true);
-        } else {
-          setIsLoading(true);
-        }
+      if (!API_URL) {
+        setIsLoading(false);
+        setIsRefreshing(false);
 
+        Alert.alert(
+          "Configuration Error",
+          "API URL is not configured."
+        );
+
+        return;
+      }
+
+      if (refresh) {
+        setIsRefreshing(true);
+      } else {
+        setIsLoading(true);
+      }
+
+      try {
         const response = await fetch(
-          `${API_URL}/api/orders`,
+          `${API_URL}/api/admin/order/getOrder`,
           {
             method: "GET",
             headers: {
@@ -207,16 +270,31 @@ export default function KitchenScreen() {
           }
         );
 
-        const data = await response.json();
+        let data: any;
 
-        if (!response.ok || !data.success) {
+        try {
+          data = await response.json();
+        } catch {
           throw new Error(
-            data.message ||
+            "Server returned an invalid response."
+          );
+        }
+
+        if (
+          !response.ok ||
+          !data?.success
+        ) {
+          throw new Error(
+            data?.message ||
               "Failed to fetch orders."
           );
         }
 
-        setOrders(data.orders || []);
+        setOrders(
+          Array.isArray(data.orders)
+            ? data.orders
+            : []
+        );
       } catch (error: any) {
         console.error(
           "Fetch kitchen orders error:",
@@ -236,13 +314,30 @@ export default function KitchenScreen() {
     []
   );
 
+  // ==========================================================
+  // INITIAL LOAD
+  // ==========================================================
+
   useEffect(() => {
     fetchOrders();
   }, [fetchOrders]);
 
-  /**
-   * Update order status
-   */
+  // ==========================================================
+  // MANUAL REFRESH
+  // ==========================================================
+
+  const handleRefresh = useCallback(() => {
+    if (isRefreshing) {
+      return;
+    }
+
+    fetchOrders(true);
+  }, [fetchOrders, isRefreshing]);
+
+  // ==========================================================
+  // UPDATE ORDER STATUS
+  // ==========================================================
+
   const handleUpdateStatus = async (
     orderId: string,
     currentStatus: OrderStatus
@@ -254,17 +349,28 @@ export default function KitchenScreen() {
       return;
     }
 
+    if (!API_URL) {
+      Alert.alert(
+        "Configuration Error",
+        "API URL is not configured."
+      );
+
+      return;
+    }
+
     try {
       setUpdatingOrderId(orderId);
 
       const response = await fetch(
-        `${API_URL}/api/orders`,
+        `${API_URL}/api/admin/order/updateOrderStatus`,
         {
           method: "PATCH",
+
           headers: {
             Accept: "application/json",
             "Content-Type": "application/json",
           },
+
           body: JSON.stringify({
             orderId,
             orderStatus: nextStatus,
@@ -272,27 +378,41 @@ export default function KitchenScreen() {
         }
       );
 
-      const data = await response.json();
+      let data: any;
 
-      if (!response.ok || !data.success) {
+      try {
+        data = await response.json();
+      } catch {
         throw new Error(
-          data.message ||
+          "Server returned an invalid response."
+        );
+      }
+
+      if (
+        !response.ok ||
+        !data?.success
+      ) {
+        throw new Error(
+          data?.message ||
             "Failed to update order status."
         );
       }
 
-      /**
-       * Update local state immediately
-       */
-      setOrders((previousOrders) =>
-        previousOrders.map((order) =>
-          order._id === orderId
-            ? {
-                ...order,
-                orderStatus: nextStatus,
-              }
-            : order
-        )
+      // ------------------------------------------------------
+      // Update locally
+      // ------------------------------------------------------
+
+      setOrders(
+        (previousOrders) =>
+          previousOrders.map((order) =>
+            order._id === orderId
+              ? {
+                  ...order,
+                  orderStatus:
+                    nextStatus,
+                }
+              : order
+          )
       );
     } catch (error: any) {
       console.error(
@@ -310,9 +430,10 @@ export default function KitchenScreen() {
     }
   };
 
-  /**
-   * Filter orders
-   */
+  // ==========================================================
+  // FILTER ORDERS
+  // ==========================================================
+
   const filteredOrders = useMemo(() => {
     if (selectedFilter === "all") {
       return orders;
@@ -320,9 +441,14 @@ export default function KitchenScreen() {
 
     return orders.filter(
       (order) =>
-        order.orderStatus === selectedFilter
+        order.orderStatus ===
+        selectedFilter
     );
   }, [orders, selectedFilter]);
+
+  // ==========================================================
+  // UI
+  // ==========================================================
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -331,17 +457,24 @@ export default function KitchenScreen() {
         backgroundColor="#0B3C29"
       />
 
-      {/* HEADER */}
+      {/* =====================================================
+          HEADER
+      ====================================================== */}
+
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <ChefHat
             color="#FFF"
             size={26}
-            style={{ marginRight: 10 }}
+            style={{
+              marginRight: 10,
+            }}
           />
 
           <View>
-            <Text style={styles.headerTitle}>
+            <Text
+              style={styles.headerTitle}
+            >
               Kitchen Display System
             </Text>
 
@@ -362,7 +495,10 @@ export default function KitchenScreen() {
         </View>
       </View>
 
-      {/* FILTER */}
+      {/* =====================================================
+          FILTER + REFRESH
+      ====================================================== */}
+
       <View style={styles.filterWrapper}>
         <ScrollView
           horizontal
@@ -375,7 +511,8 @@ export default function KitchenScreen() {
         >
           {filterTabs.map((tab) => {
             const isSelected =
-              selectedFilter === tab.value;
+              selectedFilter ===
+              tab.value;
 
             return (
               <TouchableOpacity
@@ -391,6 +528,7 @@ export default function KitchenScreen() {
                     tab.value
                   )
                 }
+                activeOpacity={0.8}
               >
                 <Text
                   style={[
@@ -406,52 +544,129 @@ export default function KitchenScreen() {
             );
           })}
 
+          {/* REFRESH */}
+
           <TouchableOpacity
-            style={styles.refreshButton}
-            onPress={() =>
-              fetchOrders(true)
-            }
+            style={[
+              styles.refreshButton,
+              isRefreshing &&
+                styles.refreshButtonDisabled,
+            ]}
+            onPress={handleRefresh}
             disabled={isRefreshing}
+            activeOpacity={0.8}
           >
-            <RefreshCw
-              color="#FFFFFF"
-              size={16}
-            />
+            {isRefreshing ? (
+              <ActivityIndicator
+                color="#FFFFFF"
+                size="small"
+              />
+            ) : (
+              <RefreshCw
+                color="#FFFFFF"
+                size={16}
+              />
+            )}
           </TouchableOpacity>
         </ScrollView>
       </View>
 
-      {/* ORDERS */}
+      {/* =====================================================
+          ORDERS
+      ====================================================== */}
+
       <ScrollView
         contentContainerStyle={
           styles.scrollContainer
         }
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={
+          false
+        }
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor="#FF7A00"
+            colors={["#FF7A00"]}
+          />
+        }
       >
+        {/* ===================================================
+            LOADING
+        ==================================================== */}
+
         {isLoading ? (
-          <View style={styles.loadingContainer}>
+          <View
+            style={styles.loadingContainer}
+          >
             <ActivityIndicator
               size="large"
               color="#FF7A00"
             />
 
-            <Text style={styles.loadingText}>
+            <Text
+              style={styles.loadingText}
+            >
               Loading kitchen orders...
             </Text>
           </View>
-        ) : filteredOrders.length === 0 ? (
-          <View style={styles.emptyContainer}>
+        ) : filteredOrders.length ===
+          0 ? (
+          /* =================================================
+              EMPTY
+          ================================================== */
+
+          <View
+            style={styles.emptyContainer}
+          >
             <ChefHat
               color="#CCC"
               size={54}
             />
 
-            <Text style={styles.emptyText}>
+            <Text
+              style={styles.emptyText}
+            >
               No orders found in this queue
             </Text>
+
+            <TouchableOpacity
+              style={styles.emptyRefreshButton}
+              onPress={handleRefresh}
+              disabled={isRefreshing}
+              activeOpacity={0.8}
+            >
+              {isRefreshing ? (
+                <ActivityIndicator
+                  color="#0B3C29"
+                  size="small"
+                />
+              ) : (
+                <RefreshCw
+                  color="#0B3C29"
+                  size={16}
+                />
+              )}
+
+              <Text
+                style={
+                  styles.emptyRefreshText
+                }
+              >
+                Refresh Orders
+              </Text>
+            </TouchableOpacity>
           </View>
         ) : (
+          /* =================================================
+              ORDER LIST
+          ================================================== */
+
           filteredOrders.map((order) => {
+            // =================================================
+            // STATUS COLORS
+            // =================================================
+
             let statusBg = "#E5E7EB";
             let statusColor = "#374151";
 
@@ -467,11 +682,6 @@ export default function KitchenScreen() {
             ) {
               statusBg = "#D6E4FD";
               statusColor = "#2563EB";
-            } else if (
-              order.orderStatus === "ready"
-            ) {
-              statusBg = "#D1EAD8";
-              statusColor = "#0B3C29";
             } else if (
               order.orderStatus ===
               "completed"
@@ -492,10 +702,8 @@ export default function KitchenScreen() {
               );
 
             const staffName =
-              typeof order.staff ===
-              "object"
-                ? order.staff?.name
-                : undefined;
+              order.staffName ||
+              "Unknown";
 
             const isUpdating =
               updatingOrderId ===
@@ -506,7 +714,10 @@ export default function KitchenScreen() {
                 key={order._id}
                 style={styles.orderCard}
               >
-                {/* ORDER HEADER */}
+                {/* ===========================================
+                    ORDER HEADER
+                ============================================ */}
+
                 <View
                   style={
                     styles.cardHeaderRow
@@ -522,14 +733,14 @@ export default function KitchenScreen() {
                         styles.orderIdText
                       }
                     >
-                      #{order.orderNumber}
+                      Table: {order.tableNumber}
                     </Text>
 
                     <View
                       style={styles.divider}
                     />
 
-                    <Text
+                    {/* <Text
                       style={
                         styles.tableText
                       }
@@ -542,8 +753,10 @@ export default function KitchenScreen() {
                           "takeaway"
                         ? "Takeaway"
                         : "Delivery"}
-                    </Text>
+                    </Text> */}
                   </View>
+
+                  {/* STATUS */}
 
                   <View
                     style={[
@@ -570,8 +783,13 @@ export default function KitchenScreen() {
                   </View>
                 </View>
 
-                {/* ORDER META */}
-                <View style={styles.metaRow}>
+                {/* ===========================================
+                    ORDER META
+                ============================================ */}
+
+                <View
+                  style={styles.metaRow}
+                >
                   <Text
                     style={styles.waiterText}
                   >
@@ -580,10 +798,10 @@ export default function KitchenScreen() {
                       style={{
                         fontWeight:
                           "bold",
+                        color: "#111827",
                       }}
                     >
-                      {staffName ||
-                        "Unknown"}
+                      {staffName}
                     </Text>
                   </Text>
 
@@ -612,7 +830,10 @@ export default function KitchenScreen() {
                   </View>
                 </View>
 
-                {/* CUSTOMER */}
+                {/* ===========================================
+                    CUSTOMER
+                ============================================ */}
+
                 {order.customer?.name &&
                   order.customer.name !==
                     "Walk-in Customer" && (
@@ -639,7 +860,10 @@ export default function KitchenScreen() {
                     </View>
                   )}
 
-                {/* ITEMS */}
+                {/* ===========================================
+                    ITEMS
+                ============================================ */}
+
                 <View
                   style={
                     styles.itemsListContainer
@@ -661,6 +885,8 @@ export default function KitchenScreen() {
                           styles.itemRow
                         }
                       >
+                        {/* QUANTITY */}
+
                         <Text
                           style={
                             styles.itemQuantityBullet
@@ -674,6 +900,8 @@ export default function KitchenScreen() {
                             styles.itemNameContainer
                           }
                         >
+                          {/* FOOD NAME */}
+
                           <Text
                             style={
                               styles.itemNameText
@@ -682,13 +910,48 @@ export default function KitchenScreen() {
                             {item.name}
                           </Text>
 
+                          {/* VARIANT */}
+
+                          {item.variant
+                            ?.name ? (
+                            <View
+                              style={
+                                styles.variantRow
+                              }
+                            >
+                              <Text
+                                style={
+                                  styles.variantLabel
+                                }
+                              >
+                                Variant:
+                              </Text>
+
+                              <Text
+                                style={
+                                  styles.variantName
+                                }
+                              >
+                                {
+                                  item
+                                    .variant
+                                    .name
+                                }
+                              </Text>
+                            </View>
+                          ) : null}
+
+                          {/* CUSTOMIZATION */}
+
                           {item.customizations ? (
                             <Text
                               style={
                                 styles.customizationText
                               }
                             >
-                              {item.customizations}
+                              {
+                                item.customizations
+                              }
                             </Text>
                           ) : null}
                         </View>
@@ -697,7 +960,10 @@ export default function KitchenScreen() {
                   )}
                 </View>
 
-                {/* NOTES */}
+                {/* ===========================================
+                    NOTES
+                ============================================ */}
+
                 {order.notes?.trim() ? (
                   <View
                     style={styles.notesBox}
@@ -715,7 +981,10 @@ export default function KitchenScreen() {
                   </View>
                 ) : null}
 
-                {/* ACTION */}
+                {/* ===========================================
+                    ACTION
+                ============================================ */}
+
                 {order.orderStatus ===
                 "cancelled" ? (
                   <View
@@ -776,6 +1045,7 @@ export default function KitchenScreen() {
                         order.orderStatus
                       )
                     }
+                    activeOpacity={0.8}
                   >
                     {isUpdating ? (
                       <ActivityIndicator
@@ -814,11 +1084,19 @@ export default function KitchenScreen() {
   );
 }
 
+// ============================================================
+// STYLES
+// ============================================================
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: "#0B3C29",
   },
+
+  // ==========================================================
+  // HEADER
+  // ==========================================================
 
   header: {
     flexDirection: "row",
@@ -873,6 +1151,10 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
 
+  // ==========================================================
+  // FILTER
+  // ==========================================================
+
   filterWrapper: {
     backgroundColor: "#072E20",
     paddingVertical: 8,
@@ -923,6 +1205,14 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
 
+  refreshButtonDisabled: {
+    opacity: 0.6,
+  },
+
+  // ==========================================================
+  // SCROLL
+  // ==========================================================
+
   scrollContainer: {
     backgroundColor: "#F8F9FA",
     borderTopLeftRadius: 24,
@@ -930,6 +1220,10 @@ const styles = StyleSheet.create({
     padding: 16,
     minHeight: "100%",
   },
+
+  // ==========================================================
+  // LOADING
+  // ==========================================================
 
   loadingContainer: {
     alignItems: "center",
@@ -944,6 +1238,10 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
+  // ==========================================================
+  // EMPTY
+  // ==========================================================
+
   emptyContainer: {
     alignItems: "center",
     justifyContent: "center",
@@ -954,7 +1252,31 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#888",
     marginTop: 10,
+    textAlign: "center",
   },
+
+  emptyRefreshButton: {
+    marginTop: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#0B3C29",
+    borderRadius: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+  },
+
+  emptyRefreshText: {
+    color: "#0B3C29",
+    fontSize: 13,
+    fontWeight: "700",
+    marginLeft: 6,
+  },
+
+  // ==========================================================
+  // ORDER CARD
+  // ==========================================================
 
   orderCard: {
     backgroundColor: "#FFF",
@@ -963,6 +1285,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: "#E5E7EB",
+
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
@@ -970,8 +1293,13 @@ const styles = StyleSheet.create({
     },
     shadowOpacity: 0.05,
     shadowRadius: 3,
+
     elevation: 2,
   },
+
+  // ==========================================================
+  // ORDER HEADER
+  // ==========================================================
 
   cardHeaderRow: {
     flexDirection: "row",
@@ -1016,6 +1344,10 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
 
+  // ==========================================================
+  // META
+  // ==========================================================
+
   metaRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1041,6 +1373,10 @@ const styles = StyleSheet.create({
     color: "#6B7280",
   },
 
+  // ==========================================================
+  // CUSTOMER
+  // ==========================================================
+
   customerRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1060,6 +1396,10 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
+  // ==========================================================
+  // ITEMS
+  // ==========================================================
+
   itemsListContainer: {
     backgroundColor: "#F9FAFB",
     borderRadius: 12,
@@ -1077,7 +1417,7 @@ const styles = StyleSheet.create({
   itemRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    paddingVertical: 4,
+    paddingVertical: 6,
   },
 
   itemQuantityBullet: {
@@ -1098,12 +1438,42 @@ const styles = StyleSheet.create({
     color: "#1F2937",
   },
 
+  // ==========================================================
+  // VARIANT
+  // ==========================================================
+
+  variantRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 3,
+  },
+
+  variantLabel: {
+    fontSize: 11,
+    color: "#9CA3AF",
+    marginRight: 4,
+  },
+
+  variantName: {
+    fontSize: 12,
+    color: "#FF7A00",
+    fontWeight: "700",
+  },
+
+  // ==========================================================
+  // CUSTOMIZATION
+  // ==========================================================
+
   customizationText: {
     fontSize: 11,
     color: "#6B7280",
-    marginTop: 2,
+    marginTop: 3,
     fontStyle: "italic",
   },
+
+  // ==========================================================
+  // NOTES
+  // ==========================================================
 
   notesBox: {
     flexDirection: "row",
@@ -1124,6 +1494,10 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
 
+  // ==========================================================
+  // ACTION BUTTON
+  // ==========================================================
+
   actionButton: {
     backgroundColor: "#0B3C29",
     flexDirection: "row",
@@ -1143,6 +1517,10 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
 
+  // ==========================================================
+  // COMPLETED
+  // ==========================================================
+
   completedBanner: {
     flexDirection: "row",
     justifyContent: "center",
@@ -1157,6 +1535,10 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontSize: 14,
   },
+
+  // ==========================================================
+  // CANCELLED
+  // ==========================================================
 
   cancelledBanner: {
     flexDirection: "row",

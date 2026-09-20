@@ -1,727 +1,868 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Image,
+  Modal,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
-  View,
-  ScrollView,
   TouchableOpacity,
-  Modal,
-  StatusBar,
-  Dimensions,
-  ActivityIndicator,
-  Alert,
+  View,
 } from "react-native";
 import {
-  UtensilsCrossed,
-  Plus,
+  ChevronDown,
   Minus,
-  ShoppingBag,
-  CheckCircle,
-  X,
-  ChevronRight,
-  Send,
+  Plus,
   Search,
-  ClipboardList,
-  RefreshCw,
+  Table2,
+  X,
+  ShoppingCart,
 } from "lucide-react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import Constants from "expo-constants";
-
-const { width } = Dimensions.get("window");
+import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const API_URL = Constants.expoConfig?.extra?.API_URL;
 
 const COLORS = {
   green: "#0B3C29",
+  greenDark: "#082F21",
+  greenLight: "#EAF4EF",
+
   orange: "#FF7A00",
+  orangeLight: "#FFF3E8",
+
   white: "#FFFFFF",
   background: "#F5F7F6",
+  card: "#FFFFFF",
+
   text: "#18211D",
+  textSecondary: "#66716C",
   muted: "#8A938F",
-  border: "#E7ECE9",
+
+  border: "#E4E9E6",
+
+  danger: "#D92D20",
+  dangerLight: "#FFF0EF",
+
+  success: "#16844A",
 };
 
-const tablesList = [
-  "Table 1",
-  "Table 2",
-  "Table 3",
-  "Table 5",
-  "Table 8",
-  "Table 12",
-  "Takeaway",
-];
+type Variant = {
+  _id?: string;
+  name: string;
+  price: number;
+  discountPrice?: number | null;
+  isAvailable?: boolean;
+};
 
 type Food = {
   _id: string;
   name: string;
-  description: string;
+  description?: string;
   category: string;
   price: number;
-  discountPrice: number | null;
+  discountPrice?: number | null;
   effectivePrice?: number;
-  image: string;
-  isAvailable: boolean;
-  isFeatured: boolean;
-  spicyLevel: number;
-  isVegetarian: boolean;
-  preparationTime: number;
-  createdAt?: string;
-  updatedAt?: string;
+  image?: string;
+  isAvailable?: boolean;
+  isFeatured?: boolean;
+  variants?: Variant[];
 };
 
 type CartItem = Food & {
   quantity: number;
+  selectedVariant?: Variant;
+};
+
+type Table = {
+  _id?: string;
+  id?: string;
+  name?: string;
+  tableNumber?: number | string;
+  number?: number | string;
 };
 
 export default function WaiterOrderFlowScreen() {
   const [foods, setFoods] = useState<Food[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>("All");
+  const [userName, setUserName] = useState<string>("");
+  
+  const [selectedCategory, setSelectedCategory] =
+    useState<string>("All");
 
   const [searchQuery, setSearchQuery] = useState("");
 
   const [cart, setCart] = useState<CartItem[]>([]);
 
-  const [isLoadingFoods, setIsLoadingFoods] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [submittingOrder, setSubmittingOrder] = useState(false);
 
-  const [isCartVisible, setIsCartVisible] = useState(false);
-  const [isTableModalVisible, setIsTableModalVisible] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const [selectedTable, setSelectedTable] = useState("Table 12");
+  // Table
+  const [tables, setTables] = useState<Table[]>([]);
+  const [selectedTable, setSelectedTable] =
+    useState<number | string | null>(null);
 
-  const [orderSentSuccess, setOrderSentSuccess] = useState(false);
+  const [isTableModalVisible, setIsTableModalVisible] =
+    useState(false);
 
-  /**
-   * Get foods from API
-   */
-  const fetchFoods = async (refresh = false) => {
-    try {
-      if (refresh) {
-        setIsRefreshing(true);
-      } else {
-        setIsLoadingFoods(true);
+  // Variant
+  const [variantFood, setVariantFood] = useState<Food | null>(null);
+
+  const [isVariantModalVisible, setIsVariantModalVisible] =
+    useState(false);
+
+    console.log(userName, "userName")
+
+  // ---------------------------------------------------------
+  // FETCH USERNAME FROM ASYNC STORAGE
+  // ---------------------------------------------------------
+useEffect(() => {
+    const fetchUserName = async () => {
+      try {
+        const storedUser = await AsyncStorage.getItem("loggedInUser");
+        if (storedUser) {
+          const parsedUser = JSON.parse(storedUser);
+          if (parsedUser && parsedUser.name) {
+            setUserName(parsedUser.name);
+          }
+        }
+      } catch (error) {
+        console.log("Failed to load user from storage", error);
       }
+    };
 
-      const response = await fetch(`${API_URL}/api/food-items?available=true`, {
-        method: "GET",
-        headers: {
-          Accept: "application/json",
-        },
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || "Failed to load food items.");
-      }
-
-      setFoods(data.foods || []);
-    } catch (error: any) {
-      console.error("Fetch foods error:", error);
-
-      Alert.alert(
-        "Unable to load menu",
-        error?.message || "Something went wrong while loading food items."
-      );
-    } finally {
-      setIsLoadingFoods(false);
-      setIsRefreshing(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchFoods();
+    fetchUserName();
   }, []);
 
-  /**
-   * Get unique categories from database
-   */
-  const categories = useMemo(() => {
-    const uniqueCategories = Array.from(
-      new Set(foods.map((food) => food.category))
+  // ---------------------------------------------------------
+  // FALLBACK TABLES
+  // ---------------------------------------------------------
+
+  const createFallbackTables = (): Table[] => {
+    return Array.from({ length: 20 }, (_, index) => ({
+      id: String(index + 1),
+      tableNumber: index + 1,
+      name: `Table ${index + 1}`,
+    }));
+  };
+
+  // ---------------------------------------------------------
+  // FETCH DATA & RESET SELECTIONS ON REFRESH
+  // ---------------------------------------------------------
+
+  const fetchData = useCallback(async (isRefresh = false) => {
+    if (!API_URL) {
+      setErrorMessage(
+        "API_URL is not configured. Please check your Expo environment configuration."
+      );
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
+    try {
+      if (isRefresh) {
+        setRefreshing(true);
+        // Reset selections/states to default on refresh
+        setCart([]);
+        setSelectedTable(null);
+        setSearchQuery("");
+        setSelectedCategory("All");
+      } else {
+        setLoading(true);
+      }
+
+      setErrorMessage(null);
+
+      const [foodRes, tableRes] = await Promise.all([
+        fetch(`${API_URL}/api/admin/food/getFood`),
+
+        fetch(`${API_URL}/api/admin/table/getTables`).catch(
+          () => null
+        ),
+      ]);
+
+      const foodData = await foodRes.json();
+
+      if (!foodRes.ok || !foodData?.success) {
+        throw new Error(
+          foodData?.message || "Failed to load menu."
+        );
+      }
+
+      const foodList: Food[] = Array.isArray(foodData.foods)
+        ? foodData.foods
+        : [];
+
+      setFoods(foodList);
+   
+      let loadedTables: Table[] = [];
+
+      if (tableRes?.ok) {
+        try {
+          const tableData = await tableRes.json();
+
+          if (
+            tableData?.success &&
+            Array.isArray(tableData.tables) &&
+            tableData.tables.length > 0
+          ) {
+            loadedTables = tableData.tables;
+          }
+        } catch {
+          // Use fallback below.
+        }
+      }
+
+      if (loadedTables.length === 0) {
+        loadedTables = createFallbackTables();
+      }
+
+      setTables(loadedTables);
+    } catch (error: any) {
+      const message =
+        error?.message || "Unable to load restaurant data.";
+
+      setErrorMessage(message);
+
+      Alert.alert("Error", message);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // ---------------------------------------------------------
+  // PRICE HELPERS
+  // ---------------------------------------------------------
+
+  const getVariantPrice = (variant: Variant) => {
+    return variant.discountPrice ?? variant.price;
+  };
+
+  const getFoodPrice = (item: Food | CartItem) => {
+    if ("selectedVariant" in item && item.selectedVariant) {
+      return getVariantPrice(item.selectedVariant);
+    }
+
+    return (
+      item.effectivePrice ??
+      item.discountPrice ??
+      item.price
+    );
+  };
+
+  // ---------------------------------------------------------
+  // CART KEY (FIXED)
+  // ---------------------------------------------------------
+
+  const getCartKey = (
+    item: Pick<CartItem, "_id" | "selectedVariant">
+  ) => {
+    if (item.selectedVariant) {
+      const variantIdentifier = item.selectedVariant._id || item.selectedVariant.name;
+      return `${item._id}-variant-${variantIdentifier}`;
+    }
+    return `${item._id}-base`;
+  };
+
+  // ---------------------------------------------------------
+  // CART UPDATE
+  // ---------------------------------------------------------
+
+  const updateCart = (
+    food: Food,
+    variant?: Variant,
+    delta = 1
+  ) => {
+    const key = getCartKey({
+      _id: food._id,
+      selectedVariant: variant,
+    });
+
+    setCart((previousCart) => {
+      const existingIndex = previousCart.findIndex(
+        (item) => getCartKey(item) === key
+      );
+
+      if (existingIndex !== -1) {
+        const updatedCart = [...previousCart];
+        const existingItem = updatedCart[existingIndex];
+        const newQuantity = existingItem.quantity + delta;
+
+        if (newQuantity <= 0) {
+          return updatedCart.filter(
+            (_, index) => index !== existingIndex
+          );
+        }
+
+        updatedCart[existingIndex] = {
+          ...existingItem,
+          quantity: newQuantity,
+        };
+
+        return updatedCart;
+      }
+
+      if (delta > 0) {
+        return [
+          ...previousCart,
+          {
+            ...food,
+            selectedVariant: variant,
+            quantity: 1,
+          },
+        ];
+      }
+
+      return previousCart;
+    });
+  };
+
+  const getQuantity = (
+    foodId: string,
+    variant?: Variant
+  ) => {
+    const key = getCartKey({
+      _id: foodId,
+      selectedVariant: variant,
+    });
+
+    const item = cart.find(
+      (cartItem) => getCartKey(cartItem) === key
     );
 
-    return ["All", ...uniqueCategories];
-  }, [foods]);
+    return item?.quantity || 0;
+  };
 
-  /**
-   * Filter foods
-   */
-  const visibleFoods = useMemo(() => {
+  const getAvailableVariants = (food: Food) => {
+    return (
+      food.variants?.filter(
+        (variant) => variant.isAvailable !== false
+      ) || []
+    );
+  };
+
+  const filteredFoods = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
     return foods.filter((food) => {
-      const matchesCategory =
-        selectedCategory === "All" || food.category === selectedCategory;
-
-      const matchesSearch =
-        !query ||
-        food.name.toLowerCase().includes(query) ||
-        food.description.toLowerCase().includes(query) ||
-        food.category.toLowerCase().includes(query);
-
-      return matchesCategory && matchesSearch;
-    });
-  }, [foods, selectedCategory, searchQuery]);
-
-  /**
-   * Get actual selling price
-   */
-  const getFoodPrice = (food: Food) => {
-    if (food.effectivePrice !== undefined && food.effectivePrice !== null) {
-      return food.effectivePrice;
-    }
-
-    if (food.discountPrice !== null && food.discountPrice !== undefined) {
-      return food.discountPrice;
-    }
-
-    return food.price;
-  };
-
-  /**
-   * Add food to cart
-   */
-  const handleAddToCart = (food: Food) => {
-    setCart((prevCart) => {
-      const existingIndex = prevCart.findIndex(
-        (item) => item._id === food._id
-      );
-
-      if (existingIndex > -1) {
-        const updated = [...prevCart];
-
-        updated[existingIndex] = {
-          ...updated[existingIndex],
-          quantity: updated[existingIndex].quantity + 1,
-        };
-
-        return updated;
+      if (food.isAvailable === false) {
+        return false;
       }
 
-      return [
-        ...prevCart,
-        {
-          ...food,
-          quantity: 1,
-        },
-      ];
+      const categoryMatch =
+        selectedCategory === "All" ||
+        food.category === selectedCategory;
+
+      const searchMatch =
+        !query ||
+        food.name.toLowerCase().includes(query) ||
+        food.description
+          ?.toLowerCase()
+          .includes(query);
+
+      return categoryMatch && Boolean(searchMatch);
     });
-  };
+  }, [
+    foods,
+    selectedCategory,
+    searchQuery,
+  ]);
 
-  /**
-   * Update quantity
-   */
-  const updateQuantity = (foodId: string, delta: number) => {
-    setCart((prevCart) =>
-      prevCart
-        .map((item) => {
-          if (item._id === foodId) {
-            return {
-              ...item,
-              quantity: item.quantity + delta,
-            };
-          }
-
-          return item;
-        })
-        .filter((item) => item.quantity > 0)
+  const { itemCount, subtotal } = useMemo(() => {
+    return cart.reduce(
+      (total, item) => {
+        total.itemCount += item.quantity;
+        total.subtotal +=
+          getFoodPrice(item) * item.quantity;
+        return total;
+      },
+      {
+        itemCount: 0,
+        subtotal: 0,
+      }
     );
-  };
+  }, [cart]);
 
-  /**
-   * Cart totals
-   */
-  const totalItemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const openVariantSelector = (food: Food) => {
+    const availableVariants = getAvailableVariants(food);
 
-  const subtotal = cart.reduce(
-    (sum, item) => sum + getFoodPrice(item) * item.quantity,
-    0
-  );
-
-  const tax = 0;
-  const discount = 0;
-  const totalAmount = subtotal + tax - discount;
-
-  /**
-   * Send order
-   */
-  const handleSendToKitchen = async () => {
-    if (cart.length === 0) {
-      Alert.alert("Empty order", "Please add at least one food item.");
+    if (availableVariants.length === 0) {
+      updateCart(food);
       return;
     }
 
-    if (!selectedTable) {
+    setVariantFood(food);
+    setIsVariantModalVisible(true);
+  };
+
+  const closeVariantModal = () => {
+    setIsVariantModalVisible(false);
+    setVariantFood(null);
+  };
+
+  const getTableDisplayName = (table: Table) => {
+    if (table.name) {
+      return table.name;
+    }
+
+    const number =
+      table.tableNumber ?? table.number;
+
+    if (number !== undefined && number !== null) {
+      return `Table ${number}`;
+    }
+
+    return "Table";
+  };
+
+  const getTableValue = (table: Table) => {
+    return (
+      table.tableNumber ??
+      table.number ??
+      table.name ??
+      table.id ??
+      null
+    );
+  };
+
+  const handlePlaceOrder = async () => {
+    if (selectedTable === null) {
       Alert.alert(
-        "Select table",
-        "Please select a table before sending the order."
+        "Select Table",
+        "Please select a table before placing the order."
+      );
+      return;
+    }
+
+    if (cart.length === 0) {
+      Alert.alert(
+        "Empty Order",
+        "Please add at least one food item."
+      );
+      return;
+    }
+
+    if (!API_URL) {
+      Alert.alert(
+        "Configuration Error",
+        "API_URL is not configured."
       );
       return;
     }
 
     try {
-      const orderType = selectedTable === "Takeaway" ? "takeaway" : "dine-in";
+      setSubmittingOrder(true);
 
-      const orderPayload = {
-        customer: {
-          name: "Walk-in Customer",
-          phone: "",
-          address: "",
-        },
-
+      const payload = {
+        tableNumber: selectedTable,
         items: cart.map((item) => ({
           food: item._id,
           name: item.name,
           quantity: item.quantity,
           price: getFoodPrice(item),
-          customizations: "",
+          variant: item.selectedVariant
+            ? {
+                id: item.selectedVariant._id || null,
+                name: item.selectedVariant.name,
+                price: getVariantPrice(item.selectedVariant),
+              }
+            : null,
         })),
-
-        orderType,
-        tableNumber: orderType === "dine-in" ? selectedTable : null,
         subtotal,
-        tax,
-        discount,
-        totalAmount,
-        orderStatus: "pending",
-        paymentStatus: "unpaid",
-        paymentMethod: "cash",
-        notes: "",
+        totalNumber: itemCount,
+        total: subtotal,
+        staffName: userName
       };
 
-      console.log("ORDER PAYLOAD:", JSON.stringify(orderPayload, null, 2));
+      console.log("Placing order with payload:", payload);
 
-      setIsTableModalVisible(false);
-      setIsCartVisible(false);
-      setOrderSentSuccess(true);
-      setCart([]);
+      const response = await fetch(
+        `${API_URL}/api/admin/order/createOrder`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        }
+      );
 
-      setTimeout(() => {
-        setOrderSentSuccess(false);
-      }, 3000);
-    } catch (error: any) {
-      console.error("Send order error:", error);
+      const data = await response.json();
+
+      if (!response.ok || !data?.success) {
+        throw new Error(
+          data?.message || "Failed to create order."
+        );
+      }
 
       Alert.alert(
-        "Order failed",
-        error?.message || "Unable to send order to kitchen."
+        "Order Placed",
+        `Order placed successfully for Table ${selectedTable}.`,
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              setCart([]);
+              setSelectedTable(null);
+              setSearchQuery("");
+              setSelectedCategory("All");
+            },
+          },
+        ]
       );
+    } catch (error: any) {
+      Alert.alert(
+        "Order Failed",
+        error?.message ||
+          "Something went wrong while placing the order."
+      );
+    } finally {
+      setSubmittingOrder(false);
     }
   };
 
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.loadingScreen}>
+        <StatusBar
+          barStyle="light-content"
+          backgroundColor={COLORS.green}
+        />
+        <View style={styles.loadingIcon}>
+          <ShoppingCart size={30} color={COLORS.orange} />
+        </View>
+        <ActivityIndicator size="large" color={COLORS.orange} />
+        <Text style={styles.loadingText}>Loading menu...</Text>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.green} />
+      <StatusBar
+        barStyle="light-content"
+        backgroundColor={COLORS.green}
+      />
 
       {/* HEADER */}
       <View style={styles.header}>
-        <View style={styles.headerTopRow}>
-          <View style={styles.brandRow}>
-            <View style={styles.logoBox}>
-              <UtensilsCrossed color="#FFFFFF" size={19} />
-            </View>
-
-            <View>
-              <Text style={styles.headerEyebrow}>RESTAURANT POS</Text>
-              <Text style={styles.headerTitle}>Staff Order Terminal</Text>
-            </View>
-          </View>
-
-          <TouchableOpacity
-            style={styles.headerCart}
-            onPress={() => setIsCartVisible(true)}
-          >
-            <ShoppingBag color="#FFFFFF" size={21} />
-
-            {totalItemsCount > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{totalItemsCount}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+        <View style={styles.headerLeft}>
+          <Text style={styles.headerKicker}>AMAR ADDA</Text>
+          <Text style={styles.headerTitle}>Create Order</Text>
         </View>
 
-        <View style={styles.tableStatus}>
-          <View style={styles.liveDot} />
-
-          <Text style={styles.tableStatusLabel}>Ordering for</Text>
-
-          <TouchableOpacity
-            onPress={() => setIsTableModalVisible(true)}
-            style={styles.tableStatusPill}
-          >
-            <Text style={styles.tableStatusText}>{selectedTable}</Text>
-            <ChevronRight color={COLORS.green} size={14} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* SUCCESS */}
-      {orderSentSuccess && (
-        <View style={styles.successBanner}>
-          <CheckCircle color="#FFFFFF" size={19} />
-          <Text style={styles.successText}>
-            Order sent to kitchen successfully
+        <TouchableOpacity
+          activeOpacity={0.8}
+          style={styles.tableButton}
+          onPress={() => setIsTableModalVisible(true)}
+        >
+          <Table2 size={17} color={COLORS.white} />
+          <Text numberOfLines={1} style={styles.tableButtonText}>
+            {selectedTable !== null ? `Table ${selectedTable}` : "Select Table"}
           </Text>
-        </View>
-      )}
+          <ChevronDown size={15} color={COLORS.white} />
+        </TouchableOpacity>
+      </View>
 
       {/* SEARCH */}
-      <View style={styles.searchSection}>
-        <View style={styles.searchBox}>
-          <Search color="#8A938F" size={19} />
+      <View style={styles.searchWrapper}>
+        <Search size={19} color={COLORS.muted} />
+        <TextInput
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search food..."
+          placeholderTextColor={COLORS.muted}
+          style={styles.searchInput}
+          returnKeyType="search"
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery("")} hitSlop={10}>
+            <X size={17} color={COLORS.muted} />
+          </TouchableOpacity>
+        )}
+      </View>
 
-          <TextInput
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Search menu items..."
-            placeholderTextColor="#9CA3AF"
-            style={styles.searchInput}
-            returnKeyType="search"
-          />
+      {/* MAIN CONTENT */}
+      <View style={styles.mainContent}>
+        {/* FOOD SECTION */}
+        <View style={styles.foodSection}>
+          <View style={styles.sectionHeader}>
+            <View>
+              <Text style={styles.sectionTitle}>Menu</Text>
+              <Text style={styles.sectionSubtitle}>{filteredFoods.length} items available</Text>
+            </View>
+            {refreshing && <ActivityIndicator size="small" color={COLORS.green} />}
+          </View>
 
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery("")}>
-              <X color="#9CA3AF" size={18} />
-            </TouchableOpacity>
+          {filteredFoods.length === 0 ? (
+            <View style={styles.emptyFood}>
+              <Search size={36} color={COLORS.muted} />
+              <Text style={styles.emptyFoodTitle}>No food found</Text>
+              <Text style={styles.emptyFoodText}>Try another search or category.</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={filteredFoods}
+              keyExtractor={(item) => item._id}
+              numColumns={2}
+              showsVerticalScrollIndicator={false}
+              refreshing={refreshing}
+              onRefresh={() => fetchData(true)}
+              columnWrapperStyle={styles.foodColumnWrapper}
+              contentContainerStyle={styles.foodListContent}
+              renderItem={({ item }) => {
+                const variants = getAvailableVariants(item);
+                const hasVariants = variants.length > 0;
+                const directQuantity = getQuantity(item._id);
+
+                return (
+                  <View style={styles.foodCard}>
+                    {item.image ? (
+                      <Image source={{ uri: item.image }} style={styles.foodImage} resizeMode="cover" />
+                    ) : (
+                      <View style={[styles.foodImage, styles.imagePlaceholder]}>
+                        <ShoppingCart size={30} color={COLORS.muted} />
+                      </View>
+                    )}
+
+                    <View style={styles.foodContent}>
+                      <Text numberOfLines={1} style={styles.foodCategory}>{item.name}</Text>
+                      <Text style={styles.foodPrice}>৳{item.discountPrice ?? item.price}</Text>
+
+                      {hasVariants ? (
+                        <TouchableOpacity
+                          activeOpacity={0.8}
+                          style={styles.addButton}
+                          onPress={() => openVariantSelector(item)}
+                        >
+                          <Plus size={14} color={COLORS.white} />
+                          <Text style={styles.addButtonText}>Choose</Text>
+                        </TouchableOpacity>
+                      ) : directQuantity > 0 ? (
+                        <View style={styles.quantityControl}>
+                          <TouchableOpacity
+                            style={styles.quantityButton}
+                            onPress={() => updateCart(item, undefined, -1)}
+                          >
+                            <Minus size={14} color={COLORS.green} />
+                          </TouchableOpacity>
+                          <Text style={styles.quantityText}>{directQuantity}</Text>
+                          <TouchableOpacity
+                            style={styles.quantityAddButton}
+                            onPress={() => updateCart(item, undefined, 1)}
+                          >
+                            <Plus size={14} color={COLORS.white} />
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <TouchableOpacity
+                          activeOpacity={0.8}
+                          style={styles.addButton}
+                          onPress={() => updateCart(item, undefined, 1)}
+                        >
+                          <Plus size={14} color={COLORS.white} />
+                          <Text style={styles.addButtonText}>Add</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                );
+              }}
+            />
           )}
+        </View>
+
+        {/* CART SECTION */}
+        <View style={styles.cartSection}>
+          <View style={styles.cartHeader}>
+            <View>
+              <Text style={styles.cartTitle}>Order</Text>
+              <Text style={styles.cartSubtitle}>{itemCount} {itemCount === 1 ? "item" : "items"}</Text>
+            </View>
+            <View style={styles.cartCountBadge}>
+              <ShoppingCart size={15} color={COLORS.green} />
+              <Text style={styles.cartCountBadgeText}>{itemCount}</Text>
+            </View>
+          </View>
+
+          {cart.length === 0 ? (
+            <View style={styles.emptyCart}>
+              <ShoppingCart size={28} color={COLORS.muted} />
+              <Text style={styles.emptyCartText}>No items added yet</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={cart}
+              keyExtractor={getCartKey}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.cartListContent}
+              renderItem={({ item }) => (
+                <View style={styles.cartItem}>
+                  <View style={styles.cartItemInfo}>
+                    <Text numberOfLines={1} style={styles.cartItemName}>{item.name}</Text>
+                    {item.selectedVariant && (
+                      <Text numberOfLines={1} style={styles.selectedVariantText}>
+                        {item.selectedVariant.name}
+                      </Text>
+                    )}
+                    <Text style={styles.cartItemPrice}>৳{getFoodPrice(item)} × {item.quantity}</Text>
+                  </View>
+
+                  <View style={styles.quantityControl}>
+                    <TouchableOpacity
+                      style={styles.quantityButton}
+                      onPress={() => updateCart(item, item.selectedVariant, -1)}
+                    >
+                      <Minus size={13} color={COLORS.green} />
+                    </TouchableOpacity>
+                    <Text style={styles.quantityText}>{item.quantity}</Text>
+                    <TouchableOpacity
+                      style={styles.quantityAddButton}
+                      onPress={() => updateCart(item, item.selectedVariant, 1)}
+                    >
+                      <Plus size={13} color={COLORS.white} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+            />
+          )}
+
+          <View style={styles.totalContainer}>
+            <View style={styles.totalRow}>
+              <Text style={styles.totalLabel}>Total</Text>
+              <Text style={styles.totalAmount}>৳{subtotal}</Text>
+            </View>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={[
+                styles.placeOrderButton,
+                (submittingOrder || cart.length === 0 || selectedTable === null) &&
+                  styles.placeOrderButtonDisabled,
+              ]}
+              onPress={handlePlaceOrder}
+              disabled={submittingOrder || cart.length === 0 || selectedTable === null}
+            >
+              {submittingOrder ? (
+                <ActivityIndicator color={COLORS.white} />
+              ) : (
+                <Text style={styles.placeOrderText}>Place Order</Text>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
-      {/* CATEGORIES */}
-      {!isLoadingFoods && foods.length > 0 && (
-        <View style={styles.categoryArea}>
-          <View style={styles.sectionLabelRow}>
-            <Text style={styles.sectionLabel}>Categories</Text>
-
-            <TouchableOpacity
-              onPress={() => fetchFoods(true)}
-              disabled={isRefreshing}
-            >
-              <RefreshCw color={COLORS.muted} size={15} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.catScroll}
-          >
-            {categories.map((category) => {
-              const isSelected = selectedCategory === category;
-
-              return (
-                <TouchableOpacity
-                  key={category}
-                  style={[
-                    styles.catTab,
-                    isSelected ? styles.catTabActive : styles.catTabInactive,
-                  ]}
-                  onPress={() => {
-                    setSelectedCategory(category);
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.catText,
-                      isSelected
-                        ? styles.catTextActive
-                        : styles.catTextInactive,
-                    ]}
-                  >
-                    {category}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-      )}
-
-      {/* MENU */}
-      <ScrollView
-        contentContainerStyle={[
-          styles.itemsContainer,
-          totalItemsCount > 0 && {
-            paddingBottom: 120,
-          },
-        ]}
-        showsVerticalScrollIndicator={false}
+      {/* TABLE MODAL */}
+      <Modal
+        visible={isTableModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setIsTableModalVisible(false)}
       >
-        {isLoadingFoods ? (
-          <View style={styles.loadingState}>
-            <ActivityIndicator size="large" color={COLORS.orange} />
-            <Text style={styles.loadingText}>Loading menu...</Text>
-          </View>
-        ) : (
-          <>
-            <View style={styles.menuHeadingRow}>
-              <View>
-                <Text style={styles.sectionHeaderTitle}>
-                  {selectedCategory === "All" ? "All Menu" : selectedCategory}
-                </Text>
-
-                <Text style={styles.menuSubtitle}>
-                  {visibleFoods.length}{" "}
-                  {visibleFoods.length === 1 ? "menu item" : "menu items"}{" "}
-                  available
-                </Text>
-              </View>
-
-              <View style={styles.categoryIcon}>
-                <UtensilsCrossed color={COLORS.green} size={17} />
-              </View>
-            </View>
-
-            {visibleFoods.length > 0 ? (
-              visibleFoods.map((food) => {
-                const cartItem = cart.find((item) => item._id === food._id);
-                const currentPrice = getFoodPrice(food);
-
-                return (
-                  <View key={food._id} style={styles.itemCard}>
-                    <View style={styles.itemVisual}>
-                      <View style={styles.foodIconCircle}>
-                        <UtensilsCrossed color={COLORS.green} size={20} />
-                      </View>
-                    </View>
-
-                    <View style={styles.itemInfo}>
-                      <Text style={styles.itemName} numberOfLines={1}>
-                        {food.name}
-                      </Text>
-
-                      <Text style={styles.itemMeta} numberOfLines={1}>
-                        {food.category} • {food.preparationTime} min
-                      </Text>
-
-                      <View style={styles.priceRow}>
-                        <Text style={styles.itemPrice}>৳{currentPrice}</Text>
-
-                        {food.discountPrice !== null &&
-                          food.discountPrice !== undefined &&
-                          food.discountPrice < food.price && (
-                            <Text style={styles.oldPrice}>৳{food.price}</Text>
-                          )}
-                      </View>
-                    </View>
-
-                    <TouchableOpacity
-                      style={styles.addButton}
-                      onPress={() => handleAddToCart(food)}
-                    >
-                      {cartItem ? (
-                        <>
-                          <Text style={styles.addedCount}>
-                            {cartItem.quantity}
-                          </Text>
-                          <CheckCircle color="#FFFFFF" size={15} />
-                        </>
-                      ) : (
-                        <>
-                          <Plus color="#FFFFFF" size={17} />
-                          <Text style={styles.addBtnText}>Add</Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                );
-              })
-            ) : (
-              <View style={styles.emptyState}>
-                <Search color="#9CA3AF" size={30} />
-                <Text style={styles.emptyTitle}>No items found</Text>
-                <Text style={styles.emptyText}>
-                  Try a different search or category.
-                </Text>
-              </View>
-            )}
-          </>
-        )}
-      </ScrollView>
-
-      {/* BOTTOM CART */}
-      {totalItemsCount > 0 && (
-        <View style={styles.bottomBar}>
-          <View style={styles.orderSummary}>
-            <View style={styles.cartCountCircle}>
-              <ShoppingBag color={COLORS.green} size={15} />
-            </View>
-
-            <View>
-              <Text style={styles.bottomBarCount}>
-                {totalItemsCount} {totalItemsCount === 1 ? "item" : "items"}
-              </Text>
-              <Text style={styles.bottomBarPrice}>৳{totalAmount}</Text>
-            </View>
-          </View>
-
-          <TouchableOpacity
-            style={styles.viewCartBtn}
-            onPress={() => setIsCartVisible(true)}
-          >
-            <Text style={styles.viewCartText}>Review Order</Text>
-            <ChevronRight color="#FFFFFF" size={18} />
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* CART MODAL */}
-      <Modal visible={isCartVisible} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <View style={styles.dragHandle} />
-
             <View style={styles.modalHeader}>
               <View>
-                <Text style={styles.modalKicker}>CURRENT ORDER</Text>
-                <Text style={styles.modalTitle}>Review & Send</Text>
+                <Text style={styles.modalTitle}>Select Table</Text>
+                <Text style={styles.modalSubtitle}>Choose the customer's table</Text>
               </View>
-
-              <TouchableOpacity
-                style={styles.modalClose}
-                onPress={() => setIsCartVisible(false)}
-              >
-                <X color="#374151" size={20} />
+              <TouchableOpacity style={styles.modalCloseIcon} onPress={() => setIsTableModalVisible(false)}>
+                <X size={20} color={COLORS.text} />
               </TouchableOpacity>
             </View>
 
-            {/* TABLE */}
-            <TouchableOpacity
-              style={styles.tableSelectorRow}
-              onPress={() => setIsTableModalVisible(true)}
-            >
-              <View style={styles.tableSelectorLeft}>
-                <View style={styles.tableIcon}>
-                  <ClipboardList color={COLORS.green} size={17} />
-                </View>
-
-                <View>
-                  <Text style={styles.tableSelectorLabel}>Serving table</Text>
-                  <Text style={styles.tableSelectorValue}>{selectedTable}</Text>
-                </View>
-              </View>
-
-              <ChevronRight color="#7A847F" size={18} />
-            </TouchableOpacity>
-
-            {/* CART ITEMS */}
-            <ScrollView
-              style={styles.cartList}
+            <FlatList
+              data={tables}
+              keyExtractor={(table, index) => String(table._id || table.id || index)}
               showsVerticalScrollIndicator={false}
-            >
-              {cart.map((item) => {
-                const itemPrice = getFoodPrice(item);
+              contentContainerStyle={styles.modalList}
+              renderItem={({ item }) => {
+                const value = getTableValue(item);
+                const isSelected = String(value) === String(selectedTable);
 
                 return (
-                  <View key={item._id} style={styles.cartModalItemRow}>
-                    <View style={styles.cartMiniIcon}>
-                      <UtensilsCrossed color={COLORS.green} size={15} />
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    style={[styles.tableItem, isSelected && styles.tableItemSelected]}
+                    onPress={() => {
+                      if (value === null || value === undefined) return;
+                      setSelectedTable(value);
+                      setIsTableModalVisible(false);
+                    }}
+                  >
+                    <View style={styles.tableIcon}>
+                      <Table2 size={18} color={isSelected ? COLORS.white : COLORS.green} />
                     </View>
-
-                    <View style={styles.cartItemInfo}>
-                      <Text style={styles.cartItemName}>{item.name}</Text>
-                      <Text style={styles.cartItemPrice}>
-                        ৳{itemPrice} each • ৳{itemPrice * item.quantity}
-                      </Text>
-                    </View>
-
-                    <View style={styles.qtyControlContainer}>
-                      <TouchableOpacity
-                        onPress={() => updateQuantity(item._id, -1)}
-                        style={styles.qtyBtn}
-                      >
-                        <Minus color={COLORS.green} size={14} />
-                      </TouchableOpacity>
-
-                      <Text style={styles.qtyNum}>{item.quantity}</Text>
-
-                      <TouchableOpacity
-                        onPress={() => updateQuantity(item._id, 1)}
-                        style={styles.qtyBtn}
-                      >
-                        <Plus color={COLORS.green} size={14} />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
+                    <Text style={[styles.tableItemText, isSelected && styles.tableItemTextSelected]}>
+                      {getTableDisplayName(item)}
+                    </Text>
+                  </TouchableOpacity>
                 );
-              })}
-            </ScrollView>
-
-            {/* TOTAL */}
-            <View style={styles.modalFooter}>
-              <View style={styles.modalTotalRow}>
-                <View>
-                  <Text style={styles.modalTotalLabel}>Total amount</Text>
-                  <Text style={styles.modalTotalSub}>
-                    {totalItemsCount} items • {selectedTable}
-                  </Text>
-                </View>
-
-                <Text style={styles.modalTotalVal}>৳{totalAmount}</Text>
-              </View>
-
-              <TouchableOpacity
-                style={styles.sendToKitchenBtn}
-                onPress={handleSendToKitchen}
-              >
-                <Send color="#FFFFFF" size={18} />
-                <Text style={styles.sendToKitchenText}>Send to Kitchen</Text>
-              </TouchableOpacity>
-            </View>
+              }}
+            />
           </View>
         </View>
       </Modal>
 
-      {/* TABLE MODAL */}
-      <Modal visible={isTableModalVisible} animationType="fade" transparent>
-        <View style={styles.tableModalOverlay}>
-          <View style={styles.subModalContent}>
-            <View style={styles.subModalHeader}>
+      {/* VARIANT MODAL */}
+      <Modal
+        visible={isVariantModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={closeVariantModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
               <View>
-                <Text style={styles.modalKicker}>ORDER SETUP</Text>
-                <Text style={styles.subModalTitle}>Select table</Text>
+                <Text style={styles.modalTitle}>Select Variant</Text>
+                <Text style={styles.modalSubtitle}>{variantFood?.name}</Text>
               </View>
-
-              <TouchableOpacity
-                style={styles.modalClose}
-                onPress={() => setIsTableModalVisible(false)}
-              >
-                <X color="#374151" size={19} />
+              <TouchableOpacity style={styles.modalCloseIcon} onPress={closeVariantModal}>
+                <X size={20} color={COLORS.text} />
               </TouchableOpacity>
             </View>
 
-            <View style={styles.tableGrid}>
-              {tablesList.map((table) => (
+            <FlatList
+              data={variantFood ? getAvailableVariants(variantFood) : []}
+              keyExtractor={(v, i) => String(v._id || i)}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.modalList}
+              renderItem={({ item: variant }) => (
                 <TouchableOpacity
-                  key={table}
-                  style={[
-                    styles.tableOptionRow,
-                    selectedTable === table && styles.tableOptionSelected,
-                  ]}
+                  activeOpacity={0.8}
+                  style={styles.tableItem}
                   onPress={() => {
-                    setSelectedTable(table);
-                    setIsTableModalVisible(false);
+                    if (variantFood) {
+                      updateCart(variantFood, variant, 1);
+                    }
+                    closeVariantModal();
                   }}
                 >
-                  <Text
-                    style={[
-                      styles.tableOptionText,
-                      selectedTable === table &&
-                        styles.tableOptionTextSelected,
-                    ]}
-                  >
-                    {table}
-                  </Text>
-
-                  {selectedTable === table && (
-                    <CheckCircle color={COLORS.orange} size={18} />
-                  )}
+                  <View style={styles.tableIcon}>
+                    <Plus size={18} color={COLORS.green} />
+                  </View>
+                  <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={styles.tableItemText}>{variant.name}</Text>
+                    <Text style={[styles.tableItemText, { color: COLORS.green }]}>৳{getVariantPrice(variant)}</Text>
+                  </View>
                 </TouchableOpacity>
-              ))}
-            </View>
+              )}
+            />
           </View>
         </View>
       </Modal>
@@ -730,596 +871,72 @@ export default function WaiterOrderFlowScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#F5F7F6",
-  },
-  header: {
-    backgroundColor: "#0B3C29",
-    paddingHorizontal: 18,
-    paddingTop: 8,
-    paddingBottom: 16,
-    borderBottomLeftRadius: 22,
-    borderBottomRightRadius: 22,
-  },
-  headerTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  brandRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  logoBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 13,
-    backgroundColor: "#FF7A00",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 11,
-  },
-  headerEyebrow: {
-    color: "#AFC5BA",
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 1.2,
-    marginBottom: 2,
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: "800",
-    color: "#FFFFFF",
-  },
-  headerCart: {
-    width: 43,
-    height: 43,
-    borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.12)",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-  },
-  badge: {
-    position: "absolute",
-    top: -5,
-    right: -4,
-    minWidth: 19,
-    height: 19,
-    paddingHorizontal: 4,
-    borderRadius: 10,
-    backgroundColor: "#FF7A00",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: "#0B3C29",
-  },
-  badgeText: {
-    color: "#FFFFFF",
-    fontSize: 9,
-    fontWeight: "900",
-  },
-  tableStatus: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 14,
-  },
-  liveDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: "#34D399",
-    marginRight: 7,
-  },
-  tableStatusLabel: {
-    color: "#C8D6D0",
-    fontSize: 12,
-    fontWeight: "600",
-    marginRight: 7,
-  },
-  tableStatusPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 10,
-    paddingVertical: 5,
-    paddingHorizontal: 9,
-  },
-  tableStatusText: {
-    color: "#0B3C29",
-    fontSize: 12,
-    fontWeight: "800",
-    marginRight: 3,
-  },
-  successBanner: {
-    backgroundColor: "#059669",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 10,
-    gap: 7,
-  },
-  successText: {
-    color: "#FFFFFF",
-    fontWeight: "800",
-    fontSize: 12,
-  },
-  searchSection: {
-    paddingHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 4,
-  },
-  searchBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 46,
-    borderWidth: 1,
-    borderColor: "#E7ECE9",
-  },
-  searchInput: {
-    flex: 1,
-    marginLeft: 8,
-    fontSize: 14,
-    color: "#18211D",
-  },
-  categoryArea: {
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  sectionLabelRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 18,
-    marginBottom: 8,
-  },
-  sectionLabel: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#8A938F",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
-  catScroll: {
-    paddingHorizontal: 16,
-    gap: 8,
-  },
-  catTab: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  catTabActive: {
-    backgroundColor: "#0B3C29",
-    borderColor: "#0B3C29",
-  },
-  catTabInactive: {
-    backgroundColor: "#FFFFFF",
-    borderColor: "#E7ECE9",
-  },
-  catText: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  catTextActive: {
-    color: "#FFFFFF",
-  },
-  catTextInactive: {
-    color: "#4B5563",
-  },
-  itemsContainer: {
-    padding: 16,
-  },
-  loadingState: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 60,
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 14,
-    color: "#8A938F",
-  },
-  menuHeadingRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  sectionHeaderTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#18211D",
-  },
-  menuSubtitle: {
-    fontSize: 12,
-    color: "#8A938F",
-    marginTop: 2,
-  },
-  categoryIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#E7ECE9",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  itemCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 14,
-    padding: 10,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: "#E7ECE9",
-  },
-  itemVisual: {
-    marginRight: 10,
-  },
-  foodIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: "#E7ECE9",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  itemInfo: {
-    flex: 1,
-    justifyContent: "center",
-  },
-  itemName: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#18211D",
-    marginBottom: 2,
-  },
-  itemMeta: {
-    fontSize: 11,
-    color: "#8A938F",
-    marginBottom: 4,
-  },
-  priceRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  itemPrice: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#0B3C29",
-  },
-  oldPrice: {
-    fontSize: 11,
-    color: "#9CA3AF",
-    textDecorationLine: "line-through",
-  },
-  addButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#0B3C29",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    gap: 4,
-  },
-  addBtnText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  addedCount: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  emptyState: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 50,
-  },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#18211D",
-    marginTop: 10,
-  },
-  emptyText: {
-    fontSize: 13,
-    color: "#8A938F",
-    marginTop: 4,
-    textAlign: "center",
-  },
-  bottomBar: {
-    position: "absolute",
-    bottom: 20,
-    left: 16,
-    right: 16,
-    backgroundColor: "#0B3C29",
-    borderRadius: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  orderSummary: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  cartCountCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#FFFFFF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  bottomBarCount: {
-    color: "#AFC5BA",
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  bottomBarPrice: {
-    color: "#FFFFFF",
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  viewCartBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FF7A00",
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    gap: 4,
-  },
-  viewCartText: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "flex-end",
-  },
-  modalContent: {
-    backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: "80%",
-    paddingBottom: 30,
-  },
-  dragHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#D1D5DB",
-    alignSelf: "center",
-    marginTop: 8,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E7ECE9",
-  },
-  modalKicker: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: "#8A938F",
-    letterSpacing: 1,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#18211D",
-  },
-  modalClose: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#F3F4F6",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tableSelectorRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "#F8F9F8",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E7ECE9",
-  },
-  tableSelectorLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  tableIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: "#E7ECE9",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tableSelectorLabel: {
-    fontSize: 11,
-    color: "#8A938F",
-    fontWeight: "600",
-  },
-  tableSelectorValue: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#0B3C29",
-  },
-  cartList: {
-    paddingHorizontal: 20,
-    maxHeight: 280,
-  },
-  cartModalItemRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
-  },
-  cartMiniIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-    backgroundColor: "#E7ECE9",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 10,
-  },
-  cartItemInfo: {
-    flex: 1,
-  },
-  cartItemName: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#18211D",
-  },
-  cartItemPrice: {
-    fontSize: 11,
-    color: "#8A938F",
-    marginTop: 2,
-  },
-  qtyControlContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  qtyBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 6,
-    backgroundColor: "#E7ECE9",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  qtyNum: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#18211D",
-    minWidth: 16,
-    textAlign: "center",
-  },
-  modalFooter: {
-    paddingHorizontal: 20,
-    paddingTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: "#E7ECE9",
-  },
-  modalTotalRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 14,
-  },
-  modalTotalLabel: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#18211D",
-  },
-  modalTotalSub: {
-    fontSize: 11,
-    color: "#8A938F",
-    marginTop: 2,
-  },
-  modalTotalVal: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0B3C29",
-  },
-  sendToKitchenBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#FF7A00",
-    paddingVertical: 12,
-    borderRadius: 12,
-    gap: 8,
-  },
-  sendToKitchenText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  tableModalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  subModalContent: {
-    width: "100%",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    maxWidth: 360,
-  },
-  subModalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 14,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E7ECE9",
-  },
-  subModalTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#18211D",
-  },
-  tableGrid: {
-    gap: 6,
-  },
-  tableOptionRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    backgroundColor: "#F8F9F8",
-    borderWidth: 1,
-    borderColor: "#E7ECE9",
-  },
-  tableOptionSelected: {
-    backgroundColor: "#FFF5EC",
-    borderColor: "#FF7A00",
-  },
-  tableOptionText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#18211D",
-  },
-  tableOptionTextSelected: {
-    color: "#FF7A00",
-  },
+  safeArea: { flex: 1, backgroundColor: COLORS.green },
+  loadingScreen: { flex: 1, backgroundColor: COLORS.green, justifyContent: 'center', alignItems: 'center' },
+  loadingIcon: { marginBottom: 16 },
+  loadingText: { color: COLORS.white, marginTop: 12, fontSize: 16 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10 },
+  headerLeft: {},
+  headerKicker: { color: COLORS.orange, fontSize: 11, fontWeight: '700', letterSpacing: 1 },
+  headerTitle: { color: COLORS.white, fontSize: 20, fontWeight: 'bold' },
+  tableButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20 },
+  tableButtonText: { color: COLORS.white, marginHorizontal: 6, fontWeight: '600', maxWidth: 100 },
+  searchWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, marginHorizontal: 16, marginBottom: 12, paddingHorizontal: 12, borderRadius: 10, height: 44 },
+  searchInput: { flex: 1, marginLeft: 8, color: COLORS.text, fontSize: 15 },
+  mainContent: { flex: 1, backgroundColor: COLORS.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden', flexDirection: 'row' },
+  foodSection: { flex: 1, padding: 12 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: COLORS.text },
+  sectionSubtitle: { fontSize: 12, color: COLORS.textSecondary },
+  emptyFood: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  emptyFoodTitle: { fontSize: 16, fontWeight: 'bold', color: COLORS.text, marginTop: 8 },
+  emptyFoodText: { fontSize: 13, color: COLORS.textSecondary, marginTop: 4 },
+  foodColumnWrapper: { justifyContent: 'space-between' },
+  foodListContent: { paddingBottom: 20 },
+  foodCard: { backgroundColor: COLORS.card, width: '48%', borderRadius: 12, marginBottom: 12, overflow: 'hidden', borderWidth: 1, borderColor: COLORS.border },
+  foodImage: { width: '100%', height: 100 },
+  imagePlaceholder: { justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.greenLight },
+  foodContent: { padding: 8 },
+  foodName: { fontSize: 14, fontWeight: 'bold', color: COLORS.text },
+  foodCategory: { fontSize: 12, color: COLORS.text, fontWeight: 'bold', marginBottom: 4 },
+  foodPrice: { fontSize: 13, fontWeight: 'bold', color: COLORS.success, marginBottom: 8 },
+  addButton: { flexDirection: 'row', backgroundColor: COLORS.green, paddingVertical: 6, borderRadius: 6, justifyContent: 'center', alignItems: 'center' },
+  addButtonText: { color: COLORS.white, fontSize: 12, fontWeight: '600', marginLeft: 4 },
+  quantityControl: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: COLORS.greenLight, borderRadius: 6, padding: 2 },
+  quantityButton: { padding: 4 },
+  quantityAddButton: { backgroundColor: COLORS.green, borderRadius: 4, padding: 4 },
+  quantityText: { fontSize: 13, fontWeight: 'bold', color: COLORS.green },
+  cartSection: { width: '40%', backgroundColor: COLORS.white, borderLeftWidth: 1, borderLeftColor: COLORS.border, padding: 12, justifyContent: 'space-between' },
+  cartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  cartTitle: { fontSize: 15, fontWeight: 'bold', color: COLORS.text },
+  cartSubtitle: { fontSize: 11, color: COLORS.textSecondary },
+  cartCountBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.greenLight, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10 },
+  cartCountBadgeText: { fontSize: 11, fontWeight: 'bold', color: COLORS.green, marginLeft: 4 },
+  emptyCart: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  emptyCartText: { fontSize: 12, color: COLORS.muted, marginTop: 4 },
+  cartListContent: { paddingBottom: 10 },
+  cartItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  cartItemInfo: { flex: 1, marginRight: 8 },
+  cartItemName: { fontSize: 12, fontWeight: 'bold', color: COLORS.text },
+  selectedVariantText: { fontSize: 10, color: COLORS.textSecondary },
+  cartItemPrice: { fontSize: 11, color: COLORS.success, marginTop: 2 },
+  totalContainer: { borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: 8 },
+  totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  totalLabel: { fontSize: 14, fontWeight: 'bold', color: COLORS.text },
+  totalAmount: { fontSize: 14, fontWeight: 'bold', color: COLORS.success },
+  placeOrderButton: { backgroundColor: COLORS.orange, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
+  placeOrderButtonDisabled: { opacity: 0.5 },
+  placeOrderText: { color: COLORS.white, fontWeight: 'bold', fontSize: 14 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: COLORS.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '60%', padding: 16 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  modalTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.text },
+  modalSubtitle: { fontSize: 12, color: COLORS.textSecondary },
+  modalCloseIcon: { padding: 4 },
+  modalList: { paddingBottom: 16 },
+  tableItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: COLORS.border, borderRadius: 8 },
+  tableItemSelected: { backgroundColor: COLORS.green },
+  tableIcon: { marginRight: 12 },
+  tableItemText: { fontSize: 15, color: COLORS.text, fontWeight: '600' },
+  tableItemTextSelected: { color: COLORS.white },
 });

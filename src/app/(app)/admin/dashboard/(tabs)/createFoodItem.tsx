@@ -1,5 +1,4 @@
-
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -18,7 +17,7 @@ import {
   Ionicons,
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import Constants from "expo-constants";
 import { uploadImages } from "@/upload/upload";
@@ -31,30 +30,104 @@ const COLORS = {
   textMuted: "#64748B",
   borderLight: "#E2E8F0",
   adminRed: "#F43F5E",
+  successGreen: "#10B981",
 };
 
 const API_URL = Constants.expoConfig?.extra?.API_URL;
 
 type SelectedImage = ImagePicker.ImagePickerAsset;
 
+interface Category {
+  _id: string;
+  name: string;
+  slug: string;
+  isActive: boolean;
+  sortOrder: number;
+}
+
 export default function CreateFoodItemScreen() {
   const router = useRouter();
 
   const [itemName, setItemName] = useState("");
-  const [category, setCategory] = useState("Fast Food");
+
+  // Store CATEGORY ID, not category name
+  const [category, setCategory] = useState<Category | null>(
+    null
+  );
+
+  const [categories, setCategories] = useState<Category[]>(
+    []
+  );
+
+  const [categoryLoading, setCategoryLoading] =
+    useState(false);
+
+  const [showCategoryList, setShowCategoryList] =
+    useState(false);
+
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
 
-  // Only one image
   const [foodImage, setFoodImage] =
     useState<SelectedImage | null>(null);
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // ============================
+  // ==========================================
+  // FETCH CATEGORIES
+  // ==========================================
+
+  const fetchCategories = async () => {
+    try {
+      setCategoryLoading(true);
+
+      const response = await fetch(
+        `${API_URL}/api/admin/category/getCategory`,
+        {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+          },
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || result.success === false) {
+        throw new Error(
+          result.message ||
+            "Failed to fetch categories."
+        );
+      }
+
+      setCategories(result.categories || []);
+    } catch (err: any) {
+      console.error(
+        "Fetch categories error:",
+        err
+      );
+
+      setError(
+        err?.message ||
+          "Failed to load categories."
+      );
+    } finally {
+      setCategoryLoading(false);
+    }
+  };
+
+  // Fetch categories whenever screen opens
+  useFocusEffect(
+    useCallback(() => {
+      fetchCategories();
+    }, [])
+  );
+
+  // ==========================================
   // PICK IMAGE
-  // ============================
+  // ==========================================
+
   const pickImage = async () => {
     try {
       setError("");
@@ -72,16 +145,23 @@ export default function CreateFoodItemScreen() {
 
       const result =
         await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          mediaTypes:
+            ImagePicker.MediaTypeOptions.Images,
           allowsMultipleSelection: false,
           quality: 0.7,
         });
 
-      if (!result.canceled && result.assets?.length) {
+      if (
+        !result.canceled &&
+        result.assets?.length
+      ) {
         setFoodImage(result.assets[0]);
       }
     } catch (err) {
-      console.error("Image picker error:", err);
+      console.error(
+        "Image picker error:",
+        err
+      );
 
       Alert.alert(
         "Error",
@@ -90,29 +170,48 @@ export default function CreateFoodItemScreen() {
     }
   };
 
-  // ============================
+  // ==========================================
   // REMOVE IMAGE
-  // ============================
+  // ==========================================
+
   const removeImage = () => {
     setFoodImage(null);
   };
 
-  // ============================
+  // ==========================================
+  // SELECT CATEGORY
+  // ==========================================
+
+  const handleCategorySelect = (
+    selectedCategory: Category
+  ) => {
+    setCategory(selectedCategory);
+    setShowCategoryList(false);
+    setError("");
+  };
+
+  // ==========================================
   // SUBMIT FOOD ITEM
-  // ============================
+  // ==========================================
+
   const handleSubmit = async () => {
     setError("");
 
     // ----------------------------
     // Validation
     // ----------------------------
+
     if (!itemName.trim()) {
-      setError("Food item name is required.");
+      setError(
+        "Food item name is required."
+      );
       return;
     }
 
-    if (!category.trim()) {
-      setError("Category is required.");
+    if (!category?._id) {
+      setError(
+        "Please select a category."
+      );
       return;
     }
 
@@ -123,23 +222,34 @@ export default function CreateFoodItemScreen() {
 
     const numericPrice = Number(price);
 
-    if (isNaN(numericPrice) || numericPrice <= 0) {
-      setError("Please enter a valid price.");
+    if (
+      isNaN(numericPrice) ||
+      numericPrice <= 0
+    ) {
+      setError(
+        "Please enter a valid price."
+      );
       return;
     }
 
     if (!description.trim()) {
-      setError("Description is required.");
+      setError(
+        "Description is required."
+      );
       return;
     }
 
     if (!foodImage) {
-      setError("Please select a food item image.");
+      setError(
+        "Please select a food item image."
+      );
       return;
     }
 
     if (!API_URL) {
-      setError("API URL is not configured.");
+      setError(
+        "API URL is not configured."
+      );
       return;
     }
 
@@ -149,6 +259,7 @@ export default function CreateFoodItemScreen() {
       // ==================================
       // STEP 1: CREATE IMAGE FORM DATA
       // ==================================
+
       const imageFormData = new FormData();
 
       const uri = foodImage.uri;
@@ -185,6 +296,7 @@ export default function CreateFoodItemScreen() {
       // ==================================
       // STEP 2: UPLOAD IMAGE
       // ==================================
+
       const remoteUrls =
         await uploadImages(imageFormData);
 
@@ -203,35 +315,55 @@ export default function CreateFoodItemScreen() {
       // ==================================
       // STEP 3: CREATE FOOD ITEM
       // ==================================
+
+      const payload = {
+        name: itemName.trim(),
+
+        // IMPORTANT:
+        // Send Category ObjectId
+        category: category._id,
+
+        price: numericPrice,
+
+        description:
+          description.trim(),
+
+        // Your current backend expects
+        // image URL
+        image: imageUrl.url,
+
+        isAvailable: true,
+        isFeatured: false,
+        spicyLevel: 0,
+        isVegetarian: false,
+        preparationTime: 15,
+      };
+
+      console.log(
+        "Food item payload:",
+        payload
+      );
+
       const response = await fetch(
-        `${API_URL}/api/food-items`,
+        `${API_URL}/api/admin/food/createFood`,
         {
           method: "POST",
           headers: {
             Accept: "application/json",
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
           },
-          body: JSON.stringify({
-            name: itemName.trim(),
-            category: category.trim(),
-            price: numericPrice,
-            description: description.trim(),
-
-            // ✅ One image
-            image: imageUrl,
-
-            isAvailable: true,
-            isFeatured: false,
-            spicyLevel: 0,
-            isVegetarian: false,
-            preparationTime: 15,
-          }),
+          body: JSON.stringify(payload),
         }
       );
 
-      const result = await response.json();
+      const result =
+        await response.json();
 
-      if (!response.ok || result.success === false) {
+      if (
+        !response.ok ||
+        result.success === false
+      ) {
         throw new Error(
           result.message ||
             "Failed to create food item."
@@ -241,6 +373,7 @@ export default function CreateFoodItemScreen() {
       // ==================================
       // SUCCESS
       // ==================================
+
       Alert.alert(
         "Success",
         result.message ||
@@ -248,7 +381,8 @@ export default function CreateFoodItemScreen() {
         [
           {
             text: "OK",
-            onPress: () => router.back(),
+            onPress: () =>
+              router.back(),
           },
         ]
       );
@@ -268,8 +402,11 @@ export default function CreateFoodItemScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView
+      style={styles.safeArea}
+    >
       {/* ================= HEADER ================= */}
+
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
@@ -288,7 +425,11 @@ export default function CreateFoodItemScreen() {
           Add New Food Item
         </Text>
 
-        <View style={{ width: 38 }} />
+        <View
+          style={{
+            width: 38,
+          }}
+        />
       </View>
 
       <KeyboardAvoidingView
@@ -297,54 +438,100 @@ export default function CreateFoodItemScreen() {
             ? "padding"
             : "height"
         }
-        style={{ flex: 1 }}
+        style={{
+          flex: 1,
+        }}
       >
         <ScrollView
           contentContainerStyle={
             styles.scrollContainer
           }
           keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+          showsVerticalScrollIndicator={
+            false
+          }
         >
           {/* ================= ERROR ================= */}
+
           {error ? (
-            <View style={styles.errorAlertBox}>
+            <View
+              style={
+                styles.errorAlertBox
+              }
+            >
               <Ionicons
                 name="alert-circle-outline"
                 size={18}
-                color={COLORS.adminRed}
+                color={
+                  COLORS.adminRed
+                }
               />
 
               <Text
-                style={styles.errorAlertText}
+                style={
+                  styles.errorAlertText
+                }
               >
                 {error}
               </Text>
+
+              <TouchableOpacity
+                onPress={() =>
+                  setError("")
+                }
+              >
+                <Ionicons
+                  name="close"
+                  size={18}
+                  color={
+                    COLORS.adminRed
+                  }
+                />
+              </TouchableOpacity>
             </View>
           ) : null}
 
-          <View style={styles.formCard}>
+          <View
+            style={styles.formCard}
+          >
             {/* ================= IMAGE ================= */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>
+
+            <View
+              style={styles.inputGroup}
+            >
+              <Text
+                style={
+                  styles.inputLabel
+                }
+              >
                 Food Item Image *
               </Text>
 
               {foodImage ? (
-                <View style={styles.imageWrapper}>
+                <View
+                  style={
+                    styles.imageWrapper
+                  }
+                >
                   <Image
                     source={{
                       uri: foodImage.uri,
                     }}
-                    style={styles.foodImage}
+                    style={
+                      styles.foodImage
+                    }
                   />
 
                   <TouchableOpacity
                     style={
                       styles.removeImageButton
                     }
-                    onPress={removeImage}
-                    disabled={isLoading}
+                    onPress={
+                      removeImage
+                    }
+                    disabled={
+                      isLoading
+                    }
                   >
                     <Ionicons
                       name="close"
@@ -354,7 +541,9 @@ export default function CreateFoodItemScreen() {
                   </TouchableOpacity>
 
                   <View
-                    style={styles.primaryBadge}
+                    style={
+                      styles.primaryBadge
+                    }
                   >
                     <Text
                       style={
@@ -367,29 +556,43 @@ export default function CreateFoodItemScreen() {
                 </View>
               ) : (
                 <TouchableOpacity
-                  style={styles.addImageBox}
-                  onPress={pickImage}
+                  style={
+                    styles.addImageBox
+                  }
+                  onPress={
+                    pickImage
+                  }
                   activeOpacity={0.85}
-                  disabled={isLoading}
+                  disabled={
+                    isLoading
+                  }
                 >
                   <View
-                    style={styles.cameraCircle}
+                    style={
+                      styles.cameraCircle
+                    }
                   >
                     <Ionicons
                       name="camera-outline"
                       size={28}
-                      color={COLORS.primary}
+                      color={
+                        COLORS.primary
+                      }
                     />
                   </View>
 
                   <Text
-                    style={styles.addImageText}
+                    style={
+                      styles.addImageText
+                    }
                   >
                     Add Food Photo
                   </Text>
 
                   <Text
-                    style={styles.imageHint}
+                    style={
+                      styles.imageHint
+                    }
                   >
                     JPG, PNG or WEBP
                   </Text>
@@ -398,15 +601,23 @@ export default function CreateFoodItemScreen() {
 
               {foodImage && (
                 <TouchableOpacity
-                  style={styles.changeImageButton}
-                  onPress={pickImage}
-                  disabled={isLoading}
+                  style={
+                    styles.changeImageButton
+                  }
+                  onPress={
+                    pickImage
+                  }
+                  disabled={
+                    isLoading
+                  }
                   activeOpacity={0.8}
                 >
                   <Ionicons
                     name="image-outline"
                     size={16}
-                    color={COLORS.primary}
+                    color={
+                      COLORS.primary
+                    }
                   />
 
                   <Text
@@ -421,84 +632,306 @@ export default function CreateFoodItemScreen() {
             </View>
 
             {/* ================= FOOD NAME ================= */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>
+
+            <View
+              style={styles.inputGroup}
+            >
+              <Text
+                style={
+                  styles.inputLabel
+                }
+              >
                 Item Name *
               </Text>
 
-              <View style={styles.inputBox}>
+              <View
+                style={styles.inputBox}
+              >
                 <MaterialCommunityIcons
                   name="food-fork-drink"
                   size={18}
-                  color={COLORS.textMuted}
-                  style={styles.inputIcon}
+                  color={
+                    COLORS.textMuted
+                  }
+                  style={
+                    styles.inputIcon
+                  }
                 />
 
                 <TextInput
-                  style={styles.textInput}
+                  style={
+                    styles.textInput
+                  }
                   placeholder="e.g. Cheese Burger Deluxe"
                   placeholderTextColor="#94A3B8"
                   value={itemName}
-                  onChangeText={setItemName}
-                  editable={!isLoading}
+                  onChangeText={
+                    setItemName
+                  }
+                  editable={
+                    !isLoading
+                  }
                 />
               </View>
             </View>
 
             {/* ================= CATEGORY ================= */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>
+
+            <View
+              style={styles.inputGroup}
+            >
+              <Text
+                style={
+                  styles.inputLabel
+                }
+              >
                 Category *
               </Text>
 
-              <View style={styles.inputBox}>
+              <TouchableOpacity
+                style={[
+                  styles.inputBox,
+                  showCategoryList &&
+                    styles.categoryInputActive,
+                ]}
+                onPress={() =>
+                  setShowCategoryList(
+                    !showCategoryList
+                  )
+                }
+                disabled={
+                  isLoading ||
+                  categoryLoading
+                }
+                activeOpacity={0.8}
+              >
                 <Ionicons
                   name="list-outline"
                   size={18}
-                  color={COLORS.textMuted}
-                  style={styles.inputIcon}
+                  color={
+                    COLORS.textMuted
+                  }
+                  style={
+                    styles.inputIcon
+                  }
                 />
 
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="e.g. Fast Food, Beverages"
-                  placeholderTextColor="#94A3B8"
-                  value={category}
-                  onChangeText={setCategory}
-                  editable={!isLoading}
-                />
-              </View>
+                <Text
+                  style={[
+                    styles.categorySelectedText,
+                    !category &&
+                      styles.placeholderText,
+                  ]}
+                >
+                  {category
+                    ? category.name
+                    : categoryLoading
+                    ? "Loading categories..."
+                    : "Select a category"}
+                </Text>
+
+                {categoryLoading ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={
+                      COLORS.primary
+                    }
+                  />
+                ) : (
+                  <Ionicons
+                    name={
+                      showCategoryList
+                        ? "chevron-up"
+                        : "chevron-down"
+                    }
+                    size={18}
+                    color={
+                      COLORS.textMuted
+                    }
+                  />
+                )}
+              </TouchableOpacity>
+
+              {/* CATEGORY LIST */}
+
+              {showCategoryList && (
+                <View
+                  style={
+                    styles.categoryDropdown
+                  }
+                >
+                  {categories.length ===
+                  0 ? (
+                    <View
+                      style={
+                        styles.emptyCategoryBox
+                      }
+                    >
+                      <MaterialCommunityIcons
+                        name="shape-outline"
+                        size={24}
+                        color={
+                          COLORS.textMuted
+                        }
+                      />
+
+                      <Text
+                        style={
+                          styles.emptyCategoryText
+                        }
+                      >
+                        No categories available.
+                      </Text>
+                    </View>
+                  ) : (
+                    categories.map(
+                      (
+                        categoryItem
+                      ) => {
+                        const selected =
+                          category?._id ===
+                          categoryItem._id;
+
+                        return (
+                          <TouchableOpacity
+                            key={
+                              categoryItem._id
+                            }
+                            style={[
+                              styles.categoryOption,
+                              selected &&
+                                styles.selectedCategoryOption,
+                            ]}
+                            onPress={() =>
+                              handleCategorySelect(
+                                categoryItem
+                              )
+                            }
+                            activeOpacity={
+                              0.8
+                            }
+                          >
+                            <View
+                              style={
+                                styles.categoryOptionIcon
+                              }
+                            >
+                              <MaterialCommunityIcons
+                                name="food"
+                                size={
+                                  17
+                                }
+                                color={
+                                  selected
+                                    ? COLORS.primary
+                                    : COLORS.textMuted
+                                }
+                              />
+                            </View>
+
+                            <View
+                              style={
+                                styles.categoryOptionInfo
+                              }
+                            >
+                              <Text
+                                style={[
+                                  styles.categoryOptionName,
+                                  selected &&
+                                    styles.selectedCategoryName,
+                                ]}
+                              >
+                                {
+                                  categoryItem.name
+                                }
+                              </Text>
+
+                              <Text
+                                style={
+                                  styles.categoryOptionSlug
+                                }
+                              >
+                                {
+                                  categoryItem.slug
+                                }
+                              </Text>
+                            </View>
+
+                            {selected && (
+                              <Ionicons
+                                name="checkmark-circle"
+                                size={
+                                  20
+                                }
+                                color={
+                                  COLORS.successGreen
+                                }
+                              />
+                            )}
+                          </TouchableOpacity>
+                        );
+                      }
+                    )
+                  )}
+                </View>
+              )}
             </View>
 
             {/* ================= PRICE ================= */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>
+
+            <View
+              style={styles.inputGroup}
+            >
+              <Text
+                style={
+                  styles.inputLabel
+                }
+              >
                 Price (৳) *
               </Text>
 
-              <View style={styles.inputBox}>
+              <View
+                style={styles.inputBox}
+              >
                 <Ionicons
                   name="cash-outline"
                   size={18}
-                  color={COLORS.textMuted}
-                  style={styles.inputIcon}
+                  color={
+                    COLORS.textMuted
+                  }
+                  style={
+                    styles.inputIcon
+                  }
                 />
 
                 <TextInput
-                  style={styles.textInput}
+                  style={
+                    styles.textInput
+                  }
                   placeholder="e.g. 350"
                   placeholderTextColor="#94A3B8"
                   keyboardType="numeric"
                   value={price}
-                  onChangeText={setPrice}
-                  editable={!isLoading}
+                  onChangeText={
+                    setPrice
+                  }
+                  editable={
+                    !isLoading
+                  }
                 />
               </View>
             </View>
 
             {/* ================= DESCRIPTION ================= */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>
+
+            <View
+              style={styles.inputGroup}
+            >
+              <Text
+                style={
+                  styles.inputLabel
+                }
+              >
                 Description & Ingredients
               </Text>
 
@@ -518,27 +951,40 @@ export default function CreateFoodItemScreen() {
                   multiline
                   numberOfLines={4}
                   textAlignVertical="top"
-                  value={description}
-                  onChangeText={setDescription}
-                  editable={!isLoading}
+                  value={
+                    description
+                  }
+                  onChangeText={
+                    setDescription
+                  }
+                  editable={
+                    !isLoading
+                  }
                 />
               </View>
             </View>
 
             {/* ================= SUBMIT ================= */}
+
             <TouchableOpacity
               style={[
                 styles.submitButton,
                 isLoading &&
                   styles.submitButtonDisabled,
               ]}
-              onPress={handleSubmit}
-              disabled={isLoading}
+              onPress={
+                handleSubmit
+              }
+              disabled={
+                isLoading
+              }
               activeOpacity={0.85}
             >
               {isLoading ? (
                 <View
-                  style={styles.submitContent}
+                  style={
+                    styles.submitContent
+                  }
                 >
                   <ActivityIndicator
                     color="#FFFFFF"
@@ -548,7 +994,9 @@ export default function CreateFoodItemScreen() {
                   <Text
                     style={[
                       styles.submitButtonText,
-                      { marginLeft: 8 },
+                      {
+                        marginLeft: 8,
+                      },
                     ]}
                   >
                     Publishing...
@@ -556,7 +1004,9 @@ export default function CreateFoodItemScreen() {
                 </View>
               ) : (
                 <View
-                  style={styles.submitContent}
+                  style={
+                    styles.submitContent
+                  }
                 >
                   <Text
                     style={
@@ -570,7 +1020,9 @@ export default function CreateFoodItemScreen() {
                     name="cloud-upload-outline"
                     size={18}
                     color="#FFFFFF"
-                    style={{ marginLeft: 6 }}
+                    style={{
+                      marginLeft: 6,
+                    }}
                   />
                 </View>
               )}
@@ -670,6 +1122,111 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
 
+  inputBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1.2,
+    borderColor: COLORS.borderLight,
+    borderRadius: 12,
+    minHeight: 50,
+    paddingHorizontal: 14,
+  },
+
+  categoryInputActive: {
+    borderColor: COLORS.primary,
+  },
+
+  inputIcon: {
+    marginRight: 10,
+  },
+
+  textInput: {
+    flex: 1,
+    color: COLORS.textMain,
+    fontSize: 14,
+    minHeight: 48,
+    fontWeight: "500",
+  },
+
+  categorySelectedText: {
+    flex: 1,
+    color: COLORS.textMain,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+
+  placeholderText: {
+    color: "#94A3B8",
+    fontWeight: "500",
+  },
+
+  // ================= CATEGORY DROPDOWN =================
+
+  categoryDropdown: {
+    marginTop: 6,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    borderRadius: 14,
+    overflow: "hidden",
+  },
+
+  categoryOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
+  },
+
+  selectedCategoryOption: {
+    backgroundColor: "#F0FDF4",
+  },
+
+  categoryOptionIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+
+  categoryOptionInfo: {
+    flex: 1,
+  },
+
+  categoryOptionName: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: COLORS.textMain,
+  },
+
+  selectedCategoryName: {
+    color: COLORS.primary,
+  },
+
+  categoryOptionSlug: {
+    marginTop: 2,
+    fontSize: 10,
+    color: COLORS.textMuted,
+  },
+
+  emptyCategoryBox: {
+    paddingVertical: 25,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  emptyCategoryText: {
+    marginTop: 7,
+    fontSize: 12,
+    color: COLORS.textMuted,
+  },
+
   // ================= IMAGE =================
 
   imageWrapper: {
@@ -694,7 +1251,8 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "rgba(0,0,0,0.65)",
+    backgroundColor:
+      "rgba(0,0,0,0.65)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -768,35 +1326,12 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  // ================= INPUTS =================
-
-  inputBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F8FAFC",
-    borderWidth: 1.2,
-    borderColor: COLORS.borderLight,
-    borderRadius: 12,
-    height: 50,
-    paddingHorizontal: 14,
-  },
+  // ================= TEXT AREA =================
 
   textAreaBox: {
     height: 100,
     alignItems: "flex-start",
     paddingVertical: 10,
-  },
-
-  inputIcon: {
-    marginRight: 10,
-  },
-
-  textInput: {
-    flex: 1,
-    color: COLORS.textMain,
-    fontSize: 14,
-    height: "100%",
-    fontWeight: "500",
   },
 
   textAreaInput: {
@@ -839,4 +1374,3 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
 });
-

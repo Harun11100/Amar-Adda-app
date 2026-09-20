@@ -72,21 +72,25 @@ export default function RegisterStaffScreen() {
 
     setIsLoading(true);
 
+    const payload={
+       name: cleanName,
+            email: cleanEmail,
+            phone: cleanPhone,
+            password: cleanPassword,
+            role,
+    }
+
+    console.log(payload)
+
     try {
       const response = await fetch(
-        `${API_URL}/api/admin/addUser`,
+        `${API_URL}/api/admin/User/addUser`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            name: cleanName,
-            email: cleanEmail,
-            phone: cleanPhone,
-            password: cleanPassword,
-            role,
-          }),
+          body: JSON.stringify(payload),
         }
       );
 
@@ -107,6 +111,7 @@ export default function RegisterStaffScreen() {
       setTimeout(() => {
         router.back();
       }, 700);
+      
     } catch (err) {
       console.error("Register staff error:", err);
 

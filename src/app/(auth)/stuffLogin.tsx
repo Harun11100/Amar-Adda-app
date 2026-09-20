@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -13,8 +13,8 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useAuthStore } from "../../store/authStore";
 import Constants from "expo-constants";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const API_URL = Constants.expoConfig?.extra?.API_URL;
 
@@ -34,24 +34,72 @@ type Role = "waiter" | "chef" | "admin";
 
 export default function Login() {
   const router = useRouter();
-  const { login } = useAuthStore();
 
   const [role, setRole] = useState<Role>("waiter");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [secureText, setSecureText] = useState(true);
   const [error, setError] = useState("");
+
   const [focusedInput, setFocusedInput] = useState<
     "email" | "password" | null
   >(null);
+
   const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingUser, setIsCheckingUser] = useState(true);
+
+  // --------------------------------------------------
+  // CHECK SAVED USER
+  // --------------------------------------------------
+  useEffect(() => {
+    const checkLoggedInUser = async () => {
+      try {
+        const storedUser = await AsyncStorage.getItem("loggedInUser");
+
+        if (!storedUser) {
+          setIsCheckingUser(false);
+          return;
+        }
+
+        const user = JSON.parse(storedUser);
+
+        // Make sure stored data is actually valid
+        if (
+          user &&
+          user.email &&
+          user.role &&
+          user.status === "active"
+        ) {
+          console.log("Logged in user found:", user.email);
+
+          router.replace("/(app)");
+          return;
+        }
+
+        // Invalid/old user data
+        await AsyncStorage.removeItem("loggedInUser");
+        setIsCheckingUser(false);
+      } catch (error) {
+        console.error("Check logged in user error:", error);
+
+        // If stored data is corrupted, remove it
+        await AsyncStorage.removeItem("loggedInUser");
+
+        setIsCheckingUser(false);
+      }
+    };
+
+    checkLoggedInUser();
+  }, [router]);
 
   const getActiveColor = () => {
     switch (role) {
       case "admin":
         return COLORS.adminRed;
+
       case "chef":
         return COLORS.chefOrange;
+
       default:
         return COLORS.emeraldGreen;
     }
@@ -63,8 +111,10 @@ export default function Login() {
     switch (role) {
       case "admin":
         return "System Admin";
+
       case "chef":
         return "Chef";
+
       default:
         return "Waiter";
     }
@@ -75,6 +125,9 @@ export default function Login() {
     setError("");
   };
 
+  // --------------------------------------------------
+  // LOGIN
+  // --------------------------------------------------
   const handleLogin = async () => {
     setError("");
 
@@ -94,7 +147,7 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${API_URL}/api/auth/login`, {
+      const response = await fetch(`${API_URL}/api/admin/User/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -119,18 +172,27 @@ export default function Login() {
 
       const loggedInUser = data.user;
 
-      // Make sure the selected role matches the account role
-      if (loggedInUser.role !== role) {
-        setError(
-          `This account does not have ${getRoleLabel()} access.`
-        );
-        return;
-      }
+      const userData = {
+        name: loggedInUser.name,
+        email: loggedInUser.email,
+        phone: loggedInUser.phone,
+        role: loggedInUser.role,
+        status: loggedInUser.status,
+      };
 
-      // Save authenticated user in Zustand
-      await login(loggedInUser);
+      // --------------------------------------------------
+      // SAVE USER TO ASYNC STORAGE
+      // --------------------------------------------------
+      await AsyncStorage.setItem(
+        "loggedInUser",
+        JSON.stringify(userData)
+      );
 
-      // Navigate to app
+      console.log("User saved to AsyncStorage:", userData);
+
+      // --------------------------------------------------
+      // REDIRECT
+      // --------------------------------------------------
       router.replace("/(app)");
     } catch (error) {
       console.error("Login error:", error);
@@ -142,6 +204,24 @@ export default function Login() {
       setIsLoading(false);
     }
   };
+
+  // --------------------------------------------------
+  // CHECKING STORED USER
+  // --------------------------------------------------
+  if (isCheckingUser) {
+    return (
+      <View style={styles.checkingContainer}>
+        <ActivityIndicator
+          size="large"
+          color={COLORS.emeraldGreen}
+        />
+
+        <Text style={styles.checkingText}>
+          Checking login...
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -169,7 +249,8 @@ export default function Login() {
             <TouchableOpacity
               style={[
                 styles.roleButton,
-                role === "waiter" && styles.roleButtonActiveWaiter,
+                role === "waiter" &&
+                  styles.roleButtonActiveWaiter,
               ]}
               onPress={() => handleRoleChange("waiter")}
               activeOpacity={0.85}
@@ -187,7 +268,8 @@ export default function Login() {
               <Text
                 style={[
                   styles.roleButtonText,
-                  role === "waiter" && styles.roleButtonTextActive,
+                  role === "waiter" &&
+                    styles.roleButtonTextActive,
                 ]}
               >
                 Waiter
@@ -198,7 +280,8 @@ export default function Login() {
             <TouchableOpacity
               style={[
                 styles.roleButton,
-                role === "chef" && styles.roleButtonActiveChef,
+                role === "chef" &&
+                  styles.roleButtonActiveChef,
               ]}
               onPress={() => handleRoleChange("chef")}
               activeOpacity={0.85}
@@ -216,7 +299,8 @@ export default function Login() {
               <Text
                 style={[
                   styles.roleButtonText,
-                  role === "chef" && styles.roleButtonTextActive,
+                  role === "chef" &&
+                    styles.roleButtonTextActive,
                 ]}
               >
                 Chef
@@ -227,7 +311,8 @@ export default function Login() {
             <TouchableOpacity
               style={[
                 styles.roleButton,
-                role === "admin" && styles.roleButtonActiveAdmin,
+                role === "admin" &&
+                  styles.roleButtonActiveAdmin,
               ]}
               onPress={() => handleRoleChange("admin")}
               activeOpacity={0.85}
@@ -245,7 +330,8 @@ export default function Login() {
               <Text
                 style={[
                   styles.roleButtonText,
-                  role === "admin" && styles.roleButtonTextActive,
+                  role === "admin" &&
+                    styles.roleButtonTextActive,
                 ]}
               >
                 Admin
@@ -431,6 +517,20 @@ export default function Login() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+
+  checkingContainer: {
+    flex: 1,
+    backgroundColor: COLORS.primaryDark,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  checkingText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
+    marginTop: 12,
   },
 
   backgroundImage: {
