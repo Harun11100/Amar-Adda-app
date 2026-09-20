@@ -322,6 +322,7 @@ export default function CreateFoodItemScreen() {
         // IMPORTANT:
         // Send Category ObjectId
         category: category._id,
+        categoryName: category.name,
 
         price: numericPrice,
 

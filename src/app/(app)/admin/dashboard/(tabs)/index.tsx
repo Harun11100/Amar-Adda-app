@@ -1,456 +1,479 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from "react";
 import {
   StyleSheet,
   Text,
   View,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
   StatusBar,
-  Dimensions,
   RefreshControl,
   ActivityIndicator,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+  Image,
+  Alert,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  LayoutDashboard,
-  ShoppingBag,
-  Users,
-  DollarSign,
-  TrendingUp,
-  Clock,
   ShieldCheck,
-  Menu,
-  LogOut,
   RefreshCw,
-} from 'lucide-react-native';
-import { router } from 'expo-router';
-import Constants from 'expo-constants';
-
-const { width } = Dimensions.get('window');
-
-const COLORS = {
-  primary: '#0B3C29',
-  adminRed: '#F43F5E',
-  background: '#F8FAF9',
-  card: '#FFFFFF',
-  text: '#0F172A',
-  textSecondary: '#64748B',
-  border: '#E2E8F0',
-  success: '#10B981',
-  warning: '#F59E0B',
-};
+  Trash2,
+  UtensilsCrossed,
+  CircleCheck,
+  CircleX,
+  ChevronDown,
+  ChevronUp,
+  Sparkles,
+  Leaf,
+  Clock,
+} from "lucide-react-native";
+import Constants from "expo-constants";
 
 const API_URL = Constants.expoConfig?.extra?.API_URL;
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
-type SalesData = {
-  date: string;
-  totalSales: number;
+const COLORS = {
+  primary: "#0F2A1D",
+  primaryLight: "#163827",
+  orange: "#F97316",
+  adminRed: "#EF4444",
+  background: "#F4F7F5",
+  card: "#FFFFFF",
+  text: "#090D16",
+  textSecondary: "#64748B",
+  border: "#E2E8F0",
+  success: "#10B981",
+  badgeBg: "#F1F5F9",
 };
 
-export default function AdminDashboardScreen() {
-  const [refreshing, setRefreshing] = useState(false);
-  const [loadingSales, setLoadingSales] = useState(true);
-  const [salesError, setSalesError] = useState('');
-  const [userData, setUserData] = useState<any>(null);
-  const [sales, setSales] = useState<SalesData>({
-    date: '',
-    totalSales: 0,
-  });
-   useEffect(() => {
-      const loadUserData = async () => {
-        try {
-          const storedUser = await AsyncStorage.getItem('loggedInUser');
-          if (storedUser) {
-            const parsedData = JSON.parse(storedUser);
-            setUserData(parsedData);
-          }
-        } catch (error) {
-          console.error('Failed to load user data from AsyncStorage:', error);
-        }
+type FoodVariant = {
+  _id?: string;
+  name: string;
+  price: number;
+  discountPrice?: number | null;
+  isAvailable?: boolean;
+};
+
+type Food = {
+  _id: string;
+  name: string;
+  description?: string;
+  category:
+    | string
+    | {
+        _id: string;
+        name: string;
       };
-  
-      loadUserData();
-    }, []);
+  price: number;
+  discountPrice?: number | null;
+  image:
+    | string
+    | {
+        url: string;
+        public_id?: string;
+      };
+  isAvailable: boolean;
+  isFeatured?: boolean;
+  isVegetarian?: boolean;
+  preparationTime?: number;
+  variants?: FoodVariant[];
+};
 
-  const fetchTodaySales = useCallback(async () => {
+export default function AdminFoodScreen() {
+  const [foods, setFoods] = useState<Food[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [expandedVariants, setExpandedVariants] = useState<Record<string, boolean>>({});
+
+  const getFoodImage = (food: Food) => {
+    if (typeof food.image === "string") return food.image;
+    return food.image?.url || "";
+  };
+
+  const formatCurrency = (amount: number) => {
+    return `৳${Number(amount || 0).toLocaleString("en-BD")}`;
+  };
+
+  const hasDiscount = (price: number, discountPrice?: number | null) => {
+    return (
+      discountPrice !== null &&
+      discountPrice !== undefined &&
+      Number(discountPrice) < Number(price)
+    );
+  };
+
+  const fetchFoods = useCallback(async () => {
+    if (!API_URL) {
+      setError("API configuration is missing.");
+      setLoading(false);
+      return;
+    }
+
     try {
-      setSalesError('');
-
-      const response = await fetch(`${API_URL}/api/admin/sales/today`);
+      setError("");
+      const response = await fetch(`${API_URL}/api/admin/food/getFood`, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+      });
 
       const data = await response.json();
 
       if (!response.ok || !data.success) {
-        throw new Error(
-          data.message || "Failed to load today's sales."
-        );
+        throw new Error(data.message || "Failed to load food items.");
       }
 
-      setSales({
-        date: data.date,
-        totalSales: Number(data.totalSales) || 0,
-      });
-    } catch (error: any) {
-      console.error('Fetch today sales error:', error);
+      const foodData: Food[] = Array.isArray(data)
+        ? data
+        : Array.isArray(data.foods)
+        ? data.foods
+        : Array.isArray(data.data)
+        ? data.data
+        : [];
 
-      setSalesError(
-        error?.message || "Couldn't load today's sales."
-      );
+      setFoods(foodData);
+    } catch (error: any) {
+      console.error("Fetch food error:", error);
+      setError(error?.message || "Unable to load food items.");
     } finally {
-      setLoadingSales(false);
+      setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchTodaySales();
-  }, [fetchTodaySales]);
-
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchTodaySales();
-    }, 10000);
-
-    return () => clearInterval(interval);
-  }, [fetchTodaySales]);
-
-  // --------------------------------------------------
-  // PULL TO REFRESH
-  // --------------------------------------------------
+    fetchFoods();
+  }, [fetchFoods]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
-
-    await fetchTodaySales();
-
-    setRefreshing(false);
+    await fetchFoods();
   };
 
-  // --------------------------------------------------
-  // FORMAT CURRENCY
-  // --------------------------------------------------
+  const toggleVariants = (foodId: string) => {
+    setExpandedVariants((previous) => ({
+      ...previous,
+      [foodId]: !previous[foodId],
+    }));
+  };
 
-  const formatCurrency = (amount: number) => {
-    return `৳${amount.toLocaleString('en-BD')}`;
+  const handleDelete = (food: Food) => {
+    Alert.alert(
+      "Delete Food",
+      `Are you sure you want to delete "${food.name}"?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: () => confirmDelete(food._id) },
+      ]
+    );
+  };
+
+  const confirmDelete = async (foodId: string) => {
+    if (!API_URL) return;
+
+    try {
+      setDeletingId(foodId);
+      const response = await fetch(`${API_URL}/api/admin/food/deleteFood`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ foodId }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || "Failed to delete food item.");
+      }
+
+      setFoods((prev) => prev.filter((food) => food._id !== foodId));
+      Alert.alert("Deleted", "Food item deleted successfully.");
+    } catch (error: any) {
+      Alert.alert("Delete Failed", error?.message || "Unable to delete this food item.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const renderVariant = (variant: FoodVariant, index: number) => {
+    const variantHasDiscount = hasDiscount(variant.price, variant.discountPrice);
+    const finalPrice =
+      variant.discountPrice !== null && variant.discountPrice !== undefined
+        ? Number(variant.discountPrice)
+        : Number(variant.price);
+
+    return (
+      <View key={variant._id || `${variant.name}-${index}`} style={styles.variantCard}>
+        <View style={styles.variantLeft}>
+          <View style={styles.variantNumber}>
+            <Text style={styles.variantNumberText}>{index + 1}</Text>
+          </View>
+          <View style={styles.variantInfo}>
+            <Text style={styles.variantName} numberOfLines={1}>
+              {variant.name}
+            </Text>
+            <View style={styles.variantPriceRow}>
+              <Text style={styles.variantFinalPrice}>{formatCurrency(finalPrice)}</Text>
+              {variantHasDiscount && (
+                <Text style={styles.variantOriginalPrice}>{formatCurrency(variant.price)}</Text>
+              )}
+            </View>
+          </View>
+        </View>
+
+        <View
+          style={[
+            styles.variantAvailability,
+            { backgroundColor: variant.isAvailable === false ? "#FEF2F2" : "#ECFDF5" },
+          ]}
+        >
+          {variant.isAvailable === false ? (
+            <CircleX size={10} color={COLORS.adminRed} />
+          ) : (
+            <CircleCheck size={10} color={COLORS.success} />
+          )}
+          <Text
+            style={[
+              styles.variantAvailabilityText,
+              { color: variant.isAvailable === false ? COLORS.adminRed : COLORS.success },
+            ]}
+          >
+            {variant.isAvailable === false ? "Off" : "Active"}
+          </Text>
+        </View>
+      </View>
+    );
+  };
+
+  const renderFoodCard = ({ item: food }: { item: Food }) => {
+    const imageUrl = getFoodImage(food);
+    const foodHasDiscount = hasDiscount(food.price, food.discountPrice);
+    const isDeleting = deletingId === food._id;
+    const variants = Array.isArray(food.variants) ? food.variants : [];
+    const hasVariants = variants.length > 0;
+    const variantsExpanded = expandedVariants[food._id] ?? false;
+    const foodFinalPrice =
+      food.discountPrice !== null && food.discountPrice !== undefined
+        ? Number(food.discountPrice)
+        : Number(food.price);
+
+    return (
+      <View style={[styles.foodCard, isDeleting && styles.foodCardDeleting]}>
+        {/* IMAGE CONTAINER */}
+        <View style={styles.foodImageContainer}>
+          {imageUrl ? (
+            <Image source={{ uri: imageUrl }} style={styles.foodImage} resizeMode="cover" />
+          ) : (
+            <View style={styles.noImage}>
+              <UtensilsCrossed size={24} color={COLORS.textSecondary} />
+            </View>
+          )}
+
+          {/* CATEGORY OVERLAY */}
+          {/* <View style={styles.categoryBadge}>
+            <Text style={styles.categoryBadgeText} numberOfLines={1}>{food.categoryName}</Text>
+          </View> */}
+
+          {/* AVAILABILITY BADGE */}
+          <View
+            style={[
+              styles.availabilityBadge,
+              { backgroundColor: food.isAvailable ? "#ECFDF5" : "#FEF2F2" },
+            ]}
+          >
+            {food.isAvailable ? (
+              <CircleCheck size={11} color={COLORS.success} />
+            ) : (
+              <CircleX size={11} color={COLORS.adminRed} />
+            )}
+            <Text
+              style={[
+                styles.availabilityText,
+                { color: food.isAvailable ? COLORS.success : COLORS.adminRed },
+              ]}
+            >
+              {food.isAvailable ? "Available" : "Hidden"}
+            </Text>
+          </View>
+        </View>
+
+        {/* CONTENT */}
+        <View style={styles.foodContent}>
+          <View style={styles.foodTitleRow}>
+            <Text style={styles.foodName} numberOfLines={1}>
+              {food.name}
+            </Text>
+          </View>
+
+          {food.description ? (
+            <Text style={styles.description} numberOfLines={2}>
+              {food.description}
+            </Text>
+          ) : null}
+
+          {/* META TAGS (TIME / VEG / FEATURED) */}
+          <View style={styles.metaRow}>
+            {food.preparationTime ? (
+              <View style={styles.metaBadge}>
+                <Clock size={10} color={COLORS.textSecondary} />
+                <Text style={styles.metaText}>{food.preparationTime}m</Text>
+              </View>
+            ) : null}
+
+            {food.isVegetarian ? (
+              <View style={[styles.metaBadge, { backgroundColor: "#ECFDF5" }]}>
+                <Leaf size={10} color={COLORS.success} />
+                <Text style={[styles.metaText, { color: COLORS.success }]}>Veg</Text>
+              </View>
+            ) : null}
+
+            {food.isFeatured ? (
+              <View style={[styles.metaBadge, { backgroundColor: "#FFF7ED" }]}>
+                <Sparkles size={10} color={COLORS.orange} />
+                <Text style={[styles.metaText, { color: COLORS.orange }]}>Featured</Text>
+              </View>
+            ) : null}
+          </View>
+
+          {/* PRICE ROW */}
+          <View style={styles.priceRow}>
+            {foodHasDiscount ? (
+              <>
+                <Text style={styles.discountPrice}>{formatCurrency(foodFinalPrice)}</Text>
+                <Text style={styles.originalPrice}>{formatCurrency(food.price)}</Text>
+              </>
+            ) : (
+              <Text style={styles.normalPrice}>{formatCurrency(food.price)}</Text>
+            )}
+          </View>
+
+          {/* VARIANTS SECTION */}
+          {hasVariants ? (
+            <View style={styles.variantsSection}>
+              <TouchableOpacity
+                style={styles.variantHeader}
+                onPress={() => toggleVariants(food._id)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.variantHeaderLeft}>
+                  <Text style={styles.variantHeaderTitle}>Variants</Text>
+                  <View style={styles.variantHeaderCount}>
+                    <Text style={styles.variantHeaderCountText}>{variants.length}</Text>
+                  </View>
+                </View>
+                {variantsExpanded ? (
+                  <ChevronUp size={14} color={COLORS.primary} />
+                ) : (
+                  <ChevronDown size={14} color={COLORS.primary} />
+                )}
+              </TouchableOpacity>
+
+              {variantsExpanded && (
+                <View style={styles.variantList}>
+                  {variants.map((v, i) => renderVariant(v, i))}
+                </View>
+              )}
+            </View>
+          ) : null}
+
+          {/* DELETE BUTTON */}
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={() => handleDelete(food)}
+            disabled={isDeleting}
+            activeOpacity={0.7}
+          >
+            {isDeleting ? (
+              <ActivityIndicator size="small" color={COLORS.adminRed} />
+            ) : (
+              <>
+                <Trash2 size={13} color={COLORS.adminRed} />
+                <Text style={styles.deleteButtonText}>Remove Item</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar
-        barStyle="light-content"
-        backgroundColor={COLORS.primary}
-      />
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
 
-      {/* --------------------------------------------- */}
-      {/* ADMIN HEADER */}
-      {/* --------------------------------------------- */}
-
+      {/* HEADER */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          
           <View style={styles.adminBadgeIcon}>
-            <ShieldCheck size={18} color="#FFF" />
+            <ShieldCheck size={20} color="#34D399" />
           </View>
-
           <View>
-            <Text style={styles.headerTitle}>
-              Admin Control Hub
-            </Text>
-
-            <Text style={styles.headerSubtitle}>
-              Amar Adda Management
-            </Text>
+            <Text style={styles.headerTitle}>Food Management</Text>
+            <Text style={styles.headerSubtitle}>Amar Adda Dashboard</Text>
           </View>
         </View>
 
-        <TouchableOpacity
-          style={styles.profileIconButton}
-          onPress={() => router.back()}
-          activeOpacity={0.8}
-        >
-          <LogOut size={20} color="#FFF" />
+        <TouchableOpacity style={styles.headerRefreshButton} onPress={fetchFoods} activeOpacity={0.7}>
+          <RefreshCw size={17} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContainer}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={COLORS.primary}
-            colors={[COLORS.primary]}
-          />
-        }
-      >
-        {/* --------------------------------------------- */}
-        {/* KPI / METRIC CARDS */}
-        {/* --------------------------------------------- */}
-
-        <View style={styles.metricsGrid}>
-          {/* TODAY'S REVENUE */}
-
-          <View style={styles.metricCard}>
-            <View
-              style={[
-                styles.metricIconBox,
-                { backgroundColor: '#EFF6FF' },
-              ]}
-            >
-              <DollarSign size={20} color="#2563EB" />
-            </View>
-
-            {loadingSales ? (
-              <ActivityIndicator
-                size="small"
-                color={COLORS.primary}
-                style={styles.salesLoader}
-              />
-            ) : (
-              <Text style={styles.metricValue}>
-                {formatCurrency(sales.totalSales)}
-              </Text>
-            )}
-
-            <Text style={styles.metricLabel}>
-              Today's Revenue
-            </Text>
-
-            {salesError ? (
-              <TouchableOpacity
-                style={styles.retryRow}
-                onPress={fetchTodaySales}
-                activeOpacity={0.7}
-              >
-                <RefreshCw
-                  size={12}
-                  color={COLORS.adminRed}
-                />
-
-                <Text style={styles.errorText}>
-                  Retry
-                </Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.trendRow}>
-                <TrendingUp
-                  size={12}
-                  color={COLORS.success}
-                />
-
-                <Text style={styles.trendText}>
-                  Today's total sales
+      <View style={styles.container}>
+        <FlatList
+          data={foods}
+          renderItem={renderFoodCard}
+          keyExtractor={(item) => item._id}
+          numColumns={2}
+          columnWrapperStyle={styles.columnWrapper}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={COLORS.primary}
+              colors={[COLORS.primary]}
+            />
+          }
+          ListHeaderComponent={
+            <View style={styles.listHeader}>
+              <View>
+                <Text style={styles.sectionTitle}>Menu Items</Text>
+                <Text style={styles.sectionSubtitle}>
+                  {foods.length} active dish{foods.length !== 1 ? "es" : ""} found
                 </Text>
               </View>
-            )}
-          </View>
 
-          {/* ACTIVE ORDERS */}
+              {error ? (
+                <View style={styles.errorCard}>
+                  <CircleX size={18} color={COLORS.adminRed} />
+                  <View style={styles.errorContent}>
+                    <Text style={styles.errorTitle}>Error Loading Data</Text>
+                    <Text style={styles.errorMessage}>{error}</Text>
+                  </View>
+                  <TouchableOpacity onPress={fetchFoods} style={styles.retryButton}>
+                    <Text style={styles.retryText}>Retry</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
 
-          <View style={styles.metricCard}>
-            <View
-              style={[
-                styles.metricIconBox,
-                { backgroundColor: '#FFF7ED' },
-              ]}
-            >
-              <ShoppingBag
-                size={20}
-                color={COLORS.warning}
-              />
+              {loading && !refreshing ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color={COLORS.primary} />
+                  <Text style={styles.loadingText}>Syncing menu catalog...</Text>
+                </View>
+              ) : null}
+
+              {!loading && !error && foods.length === 0 ? (
+                <View style={styles.emptyCard}>
+                  <View style={styles.emptyIcon}>
+                    <UtensilsCrossed size={24} color={COLORS.primary} />
+                  </View>
+                  <Text style={styles.emptyTitle}>No Foods Added</Text>
+                  <Text style={styles.emptyText}>Your menu catalog is currently empty.</Text>
+                </View>
+              ) : null}
             </View>
-
-            <Text style={styles.metricValue}>
-              —
-            </Text>
-
-            <Text style={styles.metricLabel}>
-              Active Orders
-            </Text>
-
-            <View style={styles.trendRow}>
-              <Clock
-                size={12}
-                color={COLORS.warning}
-              />
-
-              <Text style={styles.trendText}>
-                Kitchen orders
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* --------------------------------------------- */}
-        {/* SECONDARY METRICS */}
-        {/* --------------------------------------------- */}
-
-        <View style={styles.secondaryMetricsRow}>
-          <View style={styles.smallMetricCard}>
-            <Users
-              size={16}
-              color={COLORS.primary}
-              style={{ marginBottom: 4 }}
-            />
-
-            <Text style={styles.smallMetricVal}>
-              —
-            </Text>
-
-            <Text style={styles.smallMetricLbl}>
-              Staff On Duty
-            </Text>
-          </View>
-
-          <View style={styles.smallMetricCard}>
-            <LayoutDashboard
-              size={16}
-              color="#8B5CF6"
-              style={{ marginBottom: 4 }}
-            />
-
-            <Text style={styles.smallMetricVal}>
-              —
-            </Text>
-
-            <Text style={styles.smallMetricLbl}>
-              Tables Occupied
-            </Text>
-          </View>
-        </View>
-
-        {/* --------------------------------------------- */}
-        {/* QUICK MANAGEMENT */}
-        {/* --------------------------------------------- */}
-
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>
-            Quick Management
-          </Text>
-        </View>
-
-        <View style={styles.quickActionsGrid}>
-          <TouchableOpacity
-            style={styles.actionButton}
-            activeOpacity={0.8}
-          >
-            <ShoppingBag
-              size={20}
-              color={COLORS.primary}
-            />
-
-            <Text style={styles.actionText}>
-              Manage Menu
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.actionButton}
-            activeOpacity={0.8}
-          >
-            <Users
-              size={20}
-              color={COLORS.primary}
-            />
-
-            <Text style={styles.actionText}>
-              Staff Directory
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.actionButton}
-            activeOpacity={0.8}
-          >
-            <TrendingUp
-              size={20}
-              color={COLORS.primary}
-            />
-
-            <Text style={styles.actionText}>
-              Sales Reports
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* --------------------------------------------- */}
-        {/* TODAY'S SALES INFORMATION */}
-        {/* --------------------------------------------- */}
-
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>
-            Today's Sales
-          </Text>
-
-          <TouchableOpacity
-            onPress={fetchTodaySales}
-            activeOpacity={0.7}
-          >
-            <RefreshCw
-              size={16}
-              color={COLORS.primary}
-            />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.salesCard}>
-          <View style={styles.salesCardLeft}>
-            <View style={styles.salesIcon}>
-              <DollarSign
-                size={22}
-                color={COLORS.success}
-              />
-            </View>
-
-            <View>
-              <Text style={styles.salesTitle}>
-                Total Sales
-              </Text>
-
-              <Text style={styles.salesDate}>
-                {sales.date || 'Today'}
-              </Text>
-            </View>
-          </View>
-
-          {loadingSales ? (
-            <ActivityIndicator
-              size="small"
-              color={COLORS.primary}
-            />
-          ) : (
-            <Text style={styles.salesAmount}>
-              {formatCurrency(sales.totalSales)}
-            </Text>
-          )}
-        </View>
-
-        {/* --------------------------------------------- */}
-        {/* NO LIVE ORDERS MESSAGE */}
-        {/* --------------------------------------------- */}
-
-        <View style={styles.emptyOrdersCard}>
-          <View style={styles.emptyIcon}>
-            <Menu
-              size={24}
-              color={COLORS.primary}
-            />
-          </View>
-
-          <Text style={styles.emptyOrdersTitle}>
-            Order history is archived
-          </Text>
-
-          <Text style={styles.emptyOrdersText}>
-            Completed orders are removed after payment.
-            Daily revenue is stored separately in sales records.
-          </Text>
-        </View>
-
-        <View style={{ height: 30 }} />
-      </ScrollView>
+          }
+          ListFooterComponent={<View style={{ height: 40 }} />}
+        />
+      </View>
     </SafeAreaView>
   );
 }
@@ -460,282 +483,409 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.primary,
   },
-
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between@@",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 14,
     backgroundColor: COLORS.primary,
   },
-
   headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
-
   adminBadgeIcon: {
-    width: 36,
-    height: 36,
+    width: 40,
+    height: 40,
     borderRadius: 12,
-    backgroundColor: 'rgba(244, 63, 94, 0.25)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
+    backgroundColor: "rgba(52, 211, 153, 0.12)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
     borderWidth: 1,
-    borderColor: 'rgba(244, 63, 94, 0.4)',
+    borderColor: "rgba(52, 211, 153, 0.2)",
   },
-
   headerTitle: {
     fontSize: 16,
-    fontWeight: '800',
-    color: '#FFF',
+    fontWeight: "700",
+    color: "#FFFFFF",
+    letterSpacing: 0.2,
   },
-
   headerSubtitle: {
-    fontSize: 11,
-    color: '#CBD5E1',
-    fontWeight: '500',
+    fontSize: 12,
+    color: "#94A3B8",
+    fontWeight: "400",
+    marginTop: 1,
   },
-
-  profileIconButton: {
+  headerRefreshButton: {
     width: 38,
     height: 38,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.05)",
   },
-
-  scrollContainer: {
+  container: {
+    flex: 1,
     backgroundColor: COLORS.background,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingTop: 20,
-    paddingHorizontal: 16,
-    flexGrow: 1,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 14,
+    paddingTop: 18,
   },
-
-  metricsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  columnWrapper: {
+    justifyContent: "space-between",
+  },
+  listHeader: {
     marginBottom: 12,
   },
-
-  metricCard: {
-    width: (width - 40) / 2,
-    backgroundColor: COLORS.card,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.03,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-
-  metricIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-
-  metricValue: {
+  sectionTitle: {
     fontSize: 18,
-    fontWeight: '800',
+    fontWeight: "800",
     color: COLORS.text,
-    marginBottom: 2,
+    letterSpacing: -0.3,
   },
-
-  metricLabel: {
+  sectionSubtitle: {
     fontSize: 12,
     color: COLORS.textSecondary,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-
-  salesLoader: {
-    height: 22,
-    alignSelf: 'flex-start',
-    marginBottom: 2,
-  },
-
-  trendRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  trendText: {
-    fontSize: 10,
-    color: COLORS.success,
-    fontWeight: '700',
-    marginLeft: 3,
-  },
-
-  retryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  errorText: {
-    fontSize: 10,
-    color: COLORS.adminRed,
-    fontWeight: '700',
-    marginLeft: 4,
-  },
-
-  secondaryMetricsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-
-  smallMetricCard: {
-    flex: 1,
-    backgroundColor: COLORS.card,
-    borderRadius: 14,
-    padding: 12,
-    alignItems: 'center',
-    marginHorizontal: 4,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-
-  smallMetricVal: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: COLORS.text,
-    marginBottom: 1,
-  },
-
-  smallMetricLbl: {
-    fontSize: 11,
-    color: COLORS.textSecondary,
-    fontWeight: '500',
-  },
-
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: COLORS.text,
-  },
-
-  quickActionsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-
-  actionButton: {
-    flex: 1,
-    backgroundColor: COLORS.card,
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginHorizontal: 4,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-
-  actionText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.text,
-    marginTop: 6,
-  },
-
-  salesCard: {
-    backgroundColor: COLORS.card,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-
-  salesCardLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  salesIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    backgroundColor: '#ECFDF5',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-
-  salesTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: COLORS.text,
-  },
-
-  salesDate: {
-    fontSize: 11,
-    color: COLORS.textSecondary,
     marginTop: 2,
+    marginBottom: 14,
+    fontWeight: "500",
   },
-
-  salesAmount: {
-    fontSize: 19,
-    fontWeight: '900',
-    color: COLORS.primary,
-  },
-
-  emptyOrdersCard: {
+  foodCard: {
+    width: "48%",
     backgroundColor: COLORS.card,
-    borderRadius: 16,
-    padding: 18,
-    alignItems: 'center',
+    borderRadius: 18,
+    marginBottom: 14,
     borderWidth: 1,
     borderColor: COLORS.border,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  foodCardDeleting: {
+    opacity: 0.5,
+  },
+  foodImageContainer: {
+    width: "100%",
+    height: 120,
+    backgroundColor: "#E2E8F0",
+    position: "relative",
+  },
+  foodImage: {
+    width: "100%",
+    height: "100%",
+  },
+  noImage: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#EEF2F6",
+  },
+  categoryBadge: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    backgroundColor: "rgba(15, 23, 42, 0.75)",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+    maxWidth: "70%",
+  },
+  categoryBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 9,
+    fontWeight: "600",
+  },
+  availabilityBadge: {
+    position: "absolute",
+    bottom: 8,
+    right: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 8,
+    gap: 3,
+  },
+  availabilityText: {
+    fontSize: 9,
+    fontWeight: "700",
+  },
+  foodContent: {
+    padding: 10,
+  },
+  foodTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  foodName: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: COLORS.text,
+    flex: 1,
+  },
+  description: {
+    fontSize: 10,
+    lineHeight: 14,
+    color: COLORS.textSecondary,
     marginTop: 4,
   },
-
-  emptyIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: '#ECFDF5',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 4,
+    marginTop: 8,
   },
-
-  emptyOrdersTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: COLORS.text,
-    marginBottom: 5,
+  metaBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "#F1F5F9",
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
-
-  emptyOrdersText: {
-    fontSize: 11,
-    lineHeight: 17,
+  metaText: {
+    fontSize: 9,
     color: COLORS.textSecondary,
-    textAlign: 'center',
+    fontWeight: "600",
+  },
+  priceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+    gap: 6,
+  },
+  normalPrice: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: COLORS.primary,
+  },
+  discountPrice: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: COLORS.orange,
+  },
+  originalPrice: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: COLORS.textSecondary,
+    textDecorationLine: "line-through",
+  },
+  variantsSection: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 10,
+    overflow: "hidden",
+    backgroundColor: "#FAFAFA",
+  },
+  variantHeader: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#F1F5F9",
+  },
+  variantHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  variantHeaderTitle: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: COLORS.primary,
+  },
+  variantHeaderCount: {
+    width: 15,
+    height: 15,
+    borderRadius: 8,
+    backgroundColor: COLORS.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  variantHeaderCountText: {
+    color: "#FFFFFF",
+    fontSize: 8,
+    fontWeight: "700",
+  },
+  variantList: {
+    padding: 6,
+    gap: 5,
+  },
+  variantCard: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 8,
+    padding: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  variantLeft: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  variantNumber: {
+    width: 18,
+    height: 18,
+    borderRadius: 5,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  variantNumberText: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: COLORS.textSecondary,
+  },
+  variantInfo: {
+    flex: 1,
+  },
+  variantName: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: COLORS.text,
+  },
+  variantPriceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 1,
+  },
+  variantFinalPrice: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: COLORS.orange,
+  },
+  variantOriginalPrice: {
+    fontSize: 8,
+    color: COLORS.textSecondary,
+    textDecorationLine: "line-through",
+  },
+  variantAvailability: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  variantAvailabilityText: {
+    fontSize: 7,
+    fontWeight: "700",
+  },
+  deleteButton: {
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: "#FEF2F2",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.15)",
+  },
+  deleteButtonText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: COLORS.adminRed,
+  },
+  loadingContainer: {
+    backgroundColor: COLORS.card,
+    borderRadius: 16,
+    paddingVertical: 30,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: 12,
+  },
+  loadingText: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    fontWeight: "500",
+    marginTop: 8,
+  },
+  emptyCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 16,
+    padding: 24,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: 12,
+  },
+  emptyIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+  emptyTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: COLORS.text,
+  },
+  emptyText: {
+    fontSize: 10,
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    marginTop: 2,
+  },
+  errorCard: {
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.2)",
+    borderRadius: 12,
+    padding: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  errorContent: {
+    flex: 1,
+    marginLeft: 8,
+  },
+  errorTitle: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: COLORS.adminRed,
+  },
+  errorMessage: {
+    fontSize: 9,
+    color: "#9F1239",
+    marginTop: 1,
+  },
+  retryButton: {
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.3)",
+  },
+  retryText: {
+    fontSize: 9,
+    color: COLORS.adminRed,
+    fontWeight: "700",
   },
 });

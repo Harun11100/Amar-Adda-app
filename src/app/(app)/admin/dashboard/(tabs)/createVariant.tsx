@@ -17,7 +17,7 @@ import {
   Plus,
   Trash2,
   UtensilsCrossed,
-  X,
+  Sparkles,
 } from 'lucide-react-native';
 import { useFocusEffect } from 'expo-router';
 import Constants from 'expo-constants';
@@ -33,18 +33,18 @@ const COLORS = {
   orangeDark: '#E96500',
   orangeLight: '#FFF1E5',
 
-  background: '#F7F8F7',
+  background: '#F4F6F4',
   card: '#FFFFFF',
 
-  text: '#17221D',
-  textSecondary: '#68736D',
-  muted: '#9AA39E',
+  text: '#111B17',
+  textSecondary: '#5A655F',
+  muted: '#8C9691',
 
-  border: '#E8ECE9',
+  border: '#E2E8E4',
   white: '#FFFFFF',
 
   success: '#2E9B63',
-  danger: '#D64545',
+  danger: '#E05252',
 };
 
 type Food = {
@@ -57,6 +57,7 @@ type Food = {
 type Variant = {
   _id?: string;
   name: string;
+  description?: string;
   price: number;
   discountPrice: number | null;
   isAvailable: boolean;
@@ -64,6 +65,7 @@ type Variant = {
 
 type VariantForm = {
   name: string;
+  description: string;
   price: string;
   discountPrice: string;
   isAvailable: boolean;
@@ -71,6 +73,7 @@ type VariantForm = {
 
 const createEmptyVariant = (): VariantForm => ({
   name: '',
+  description: '',
   price: '',
   discountPrice: '',
   isAvailable: true,
@@ -79,52 +82,32 @@ const createEmptyVariant = (): VariantForm => ({
 export default function CreateFoodVariantScreen() {
   const [foods, setFoods] = useState<Food[]>([]);
   const [selectedFood, setSelectedFood] = useState<Food | null>(null);
-
   const [variants, setVariants] = useState<VariantForm[]>([
     createEmptyVariant(),
   ]);
-
   const [showFoodList, setShowFoodList] = useState(false);
-
   const [loadingFoods, setLoadingFoods] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-
   const [error, setError] = useState('');
-
-  /*
-   * ============================
-   * FETCH FOODS
-   * ============================
-   */
 
   const fetchFoods = async () => {
     try {
       setLoadingFoods(true);
       setError('');
-
-      const response = await fetch(
-        `${API_URL}/api/admin/food/getFood`
-      );
-
+      const response = await fetch(`${API_URL}/api/admin/food/getFood`);
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          data?.message || 'Failed to fetch food items.'
-        );
+        throw new Error(data?.message || 'Failed to fetch food items.');
       }
 
       const foodData = Array.isArray(data)
         ? data
         : data.foods || data.data || [];
-
       setFoods(foodData);
     } catch (error: any) {
       console.error('Fetch foods error:', error);
-
-      setError(
-        error?.message || 'Unable to load food items.'
-      );
+      setError(error?.message || 'Unable to load food items.');
     } finally {
       setLoadingFoods(false);
     }
@@ -136,30 +119,11 @@ export default function CreateFoodVariantScreen() {
     }, [])
   );
 
-  /*
-   * ============================
-   * SELECT FOOD
-   * ============================
-   */
-
   const handleSelectFood = (food: Food) => {
     setSelectedFood(food);
     setShowFoodList(false);
-
-    /*
-     * Start with one empty variant.
-     *
-     * We don't automatically copy existing variants
-     * because this form is for adding new variants.
-     */
     setVariants([createEmptyVariant()]);
   };
-
-  /*
-   * ============================
-   * UPDATE VARIANT
-   * ============================
-   */
 
   const updateVariant = (
     index: number,
@@ -168,217 +132,105 @@ export default function CreateFoodVariantScreen() {
   ) => {
     setVariants((current) =>
       current.map((variant, i) =>
-        i === index
-          ? {
-              ...variant,
-              [field]: value,
-            }
-          : variant
+        i === index ? { ...variant, [field]: value } : variant
       )
     );
   };
 
-  /*
-   * ============================
-   * ADD VARIANT
-   * ============================
-   */
-
   const addVariant = () => {
-    setVariants((current) => [
-      ...current,
-      createEmptyVariant(),
-    ]);
+    setVariants((current) => [...current, createEmptyVariant()]);
   };
-
-  /*
-   * ============================
-   * REMOVE VARIANT
-   * ============================
-   */
 
   const removeVariant = (index: number) => {
     if (variants.length === 1) {
-      Alert.alert(
-        'Cannot remove',
-        'At least one variant is required.'
-      );
-
+      Alert.alert('Cannot remove', 'At least one variant is required.');
       return;
     }
-
-    setVariants((current) =>
-      current.filter((_, i) => i !== index)
-    );
+    setVariants((current) => current.filter((_, i) => i !== index));
   };
-
-  /*
-   * ============================
-   * VALIDATE
-   * ============================
-   */
 
   const validateForm = () => {
     if (!selectedFood) {
-      Alert.alert(
-        'Select Food',
-        'Please select a food item first.'
-      );
-
+      Alert.alert('Select Food', 'Please select a food item first.');
       return false;
     }
 
     for (let i = 0; i < variants.length; i++) {
       const variant = variants[i];
-
       if (!variant.name.trim()) {
-        Alert.alert(
-          'Variant Name Required',
-          `Please enter a name for Variant ${i + 1}.`
-        );
-
+        Alert.alert('Variant Name Required', `Please enter a name for Variant ${i + 1}.`);
         return false;
       }
 
       const price = Number(variant.price);
-
-      if (
-        !variant.price ||
-        !Number.isFinite(price) ||
-        price < 0
-      ) {
-        Alert.alert(
-          'Invalid Price',
-          `Please enter a valid price for Variant ${
-            i + 1
-          }.`
-        );
-
+      if (!variant.price || !Number.isFinite(price) || price < 0) {
+        Alert.alert('Invalid Price', `Please enter a valid price for Variant ${i + 1}.`);
         return false;
       }
 
       if (variant.discountPrice.trim()) {
-        const discountPrice = Number(
-          variant.discountPrice
-        );
-
-        if (
-          !Number.isFinite(discountPrice) ||
-          discountPrice < 0
-        ) {
-          Alert.alert(
-            'Invalid Discount',
-            `Please enter a valid discount price for Variant ${
-              i + 1
-            }.`
-          );
-
+        const discountPrice = Number(variant.discountPrice);
+        if (!Number.isFinite(discountPrice) || discountPrice < 0) {
+          Alert.alert('Invalid Discount', `Please enter a valid discount price for Variant ${i + 1}.`);
           return false;
         }
-
         if (discountPrice > price) {
-          Alert.alert(
-            'Invalid Discount',
-            `Discount price cannot be greater than the original price for Variant ${
-              i + 1
-            }.`
-          );
-
+          Alert.alert('Invalid Discount', `Discount price cannot be greater than the original price for Variant ${i + 1}.`);
           return false;
         }
       }
     }
-
     return true;
   };
 
-  /*
-   * ============================
-   * SUBMIT
-   * ============================
-   */
-const handleSubmit = async () => {
-  if (!validateForm()) {
-    return;
-  }
+  const handleSubmit = async () => {
+    if (!validateForm() || !selectedFood) return;
 
-  if (!selectedFood) {
-    return;
-  }
+    try {
+      setSubmitting(true);
+      const formattedVariants = variants.map((variant) => ({
+        name: variant.name.trim(),
+        description: variant.description.trim() || undefined,
+        price: Number(variant.price),
+        discountPrice: variant.discountPrice.trim()
+          ? Number(variant.discountPrice)
+          : null,
+        isAvailable: variant.isAvailable,
+      }));
 
-  try {
-    setSubmitting(true);
-
-    const formattedVariants = variants.map((variant) => ({
-      name: variant.name.trim(),
-      price: Number(variant.price),
-      discountPrice: variant.discountPrice.trim()
-        ? Number(variant.discountPrice)
-        : null,
-      isAvailable: variant.isAvailable,
-    }));
-
-    const response = await fetch(
-      `${API_URL}/api/admin/food/addVariant`,
-      {
+      const response = await fetch(`${API_URL}/api/admin/food/addVariant`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           foodId: selectedFood._id,
           variants: formattedVariants,
         }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.message || 'Failed to add variants.');
       }
-    );
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(
-        data?.message || 'Failed to add variants.'
-      );
-    }
-
-    console.log('Add variants response:', data);
-
-    Alert.alert(
-      'Success',
-      data?.message || 'Food variants added successfully.',
-      [
+      Alert.alert('Success', data?.message || 'Food variants added successfully.', [
         {
           text: 'OK',
           onPress: () => {
-            // Reset selected food
             setSelectedFood(null);
-
-            // Reset variants
             setVariants([createEmptyVariant()]);
-
-            // Close food dropdown if open
             setShowFoodList(false);
-
-            // Refresh food list
             fetchFoods();
           },
         },
-      ]
-    );
-  } catch (error: any) {
-    console.error(
-      'Create variants error:',
-      error
-    );
+      ]);
+    } catch (error: any) {
+      console.error('Create variants error:', error);
+      Alert.alert('Error', error?.message || 'Something went wrong while adding variants.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
-    Alert.alert(
-      'Error',
-      error?.message ||
-        'Something went wrong while adding variants.'
-    );
-  } finally {
-    setSubmitting(false);
-  }
-};
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
@@ -386,153 +238,80 @@ const handleSubmit = async () => {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
-        {/* ================= HEADER ================= */}
-
+        {/* HEADER */}
         <View style={styles.header}>
-          <View style={styles.headerIcon}>
-            <UtensilsCrossed
-              size={22}
-              color={COLORS.white}
-            />
+          <View style={styles.headerIconWrapper}>
+            <UtensilsCrossed size={20} color={COLORS.primary} />
           </View>
-
           <View style={styles.headerTextContainer}>
-            <Text style={styles.headerTitle}>
-              Food Variants
-            </Text>
-
-            <Text style={styles.headerSubtitle}>
-              Add sizes, types or options
-            </Text>
+            <Text style={styles.headerTitle}>Food Variants</Text>
+            <Text style={styles.headerSubtitle}>Customize sizes, portions & options</Text>
           </View>
         </View>
 
-        {/* ================= ERROR ================= */}
-
+        {/* ERROR BANNER */}
         {error ? (
           <View style={styles.errorCard}>
-            <Text style={styles.errorText}>
-              {error}
-            </Text>
+            <Text style={styles.errorText}>{error}</Text>
           </View>
         ) : null}
 
-        {/* ================= SELECT FOOD ================= */}
-
+        {/* SELECT FOOD SECTION */}
         <View style={styles.section}>
-          <Text style={styles.label}>
-            Select Food
-          </Text>
+          <Text style={styles.label}>TARGET FOOD ITEM</Text>
 
           <TouchableOpacity
-            style={[
-              styles.selectButton,
-              selectedFood &&
-                styles.selectButtonSelected,
-            ]}
+            style={[styles.selectButton, selectedFood && styles.selectButtonSelected]}
             activeOpacity={0.8}
-            onPress={() =>
-              setShowFoodList((current) => !current)
-            }
+            onPress={() => setShowFoodList((current) => !current)}
           >
             <View style={styles.selectLeft}>
               <View style={styles.foodIcon}>
-                <UtensilsCrossed
-                  size={18}
-                  color={COLORS.primary}
-                />
+                <Sparkles size={16} color={COLORS.primary} />
               </View>
-
-              <View>
+              <View style={{ flex: 1 }}>
                 <Text
                   style={[
                     styles.selectText,
-                    !selectedFood &&
-                      styles.placeholderText,
+                    !selectedFood && styles.placeholderText,
                   ]}
+                  numberOfLines={1}
                 >
-                  {selectedFood
-                    ? selectedFood.name
-                    : 'Choose a food item'}
+                  {selectedFood ? selectedFood.name : 'Select a food item'}
                 </Text>
-
                 {selectedFood ? (
-                  <Text style={styles.foodBasePrice}>
-                    Base price: ৳
-                    {selectedFood.price}
-                  </Text>
+                  <Text style={styles.foodBasePrice}>Base Price: ৳{selectedFood.price}</Text>
                 ) : null}
               </View>
             </View>
-
-            <ChevronDown
-              size={19}
-              color={COLORS.textSecondary}
-            />
+            <ChevronDown size={18} color={COLORS.textSecondary} />
           </TouchableOpacity>
 
-          {/* FOOD LIST */}
-
+          {/* FOOD DROPDOWN LIST */}
           {showFoodList ? (
             <View style={styles.foodList}>
               {loadingFoods ? (
                 <View style={styles.foodLoading}>
-                  <ActivityIndicator
-                    size="small"
-                    color={COLORS.primary}
-                  />
-
-                  <Text style={styles.loadingText}>
-                    Loading food...
-                  </Text>
+                  <ActivityIndicator size="small" color={COLORS.primary} />
+                  <Text style={styles.loadingText}>Loading items...</Text>
                 </View>
               ) : foods.length === 0 ? (
-                <Text style={styles.noFoodText}>
-                  No food items found.
-                </Text>
+                <Text style={styles.noFoodText}>No food items found.</Text>
               ) : (
                 foods.map((food) => {
-                  const isSelected =
-                    selectedFood?._id === food._id;
-
+                  const isSelected = selectedFood?._id === food._id;
                   return (
                     <TouchableOpacity
                       key={food._id}
-                      style={[
-                        styles.foodOption,
-                        isSelected &&
-                          styles.foodOptionSelected,
-                      ]}
-                      activeOpacity={0.75}
-                      onPress={() =>
-                        handleSelectFood(food)
-                      }
+                      style={[styles.foodOption, isSelected && styles.foodOptionSelected]}
+                      activeOpacity={0.7}
+                      onPress={() => handleSelectFood(food)}
                     >
-                      <View>
-                        <Text
-                          style={
-                            styles.foodOptionName
-                          }
-                        >
-                          {food.name}
-                        </Text>
-
-                        <Text
-                          style={
-                            styles.foodOptionPrice
-                          }
-                        >
-                          Base price: ৳
-                          {food.price}
-                        </Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.foodOptionName}>{food.name}</Text>
+                        <Text style={styles.foodOptionPrice}>৳{food.price}</Text>
                       </View>
-
-                      {isSelected ? (
-                        <Check
-                          size={19}
-                          color={COLORS.primary}
-                        />
-                      ) : null}
+                      {isSelected && <Check size={18} color={COLORS.primary} />}
                     </TouchableOpacity>
                   );
                 })
@@ -541,296 +320,145 @@ const handleSubmit = async () => {
           ) : null}
         </View>
 
-        {/* ================= SELECTED FOOD ================= */}
-
-        {selectedFood ? (
-          <View style={styles.selectedFoodCard}>
-            <View>
-              <Text style={styles.selectedFoodLabel}>
-                Selected Food
-              </Text>
-
-              <Text style={styles.selectedFoodName}>
-                {selectedFood.name}
-              </Text>
-            </View>
-
-            <View style={styles.basePriceBadge}>
-              <Text
-                style={styles.basePriceBadgeText}
-              >
-                Base ৳{selectedFood.price}
-              </Text>
-            </View>
-          </View>
-        ) : null}
-
-        {/* ================= VARIANTS ================= */}
-
+        {/* VARIANTS BUILDER */}
         <View style={styles.section}>
           <View style={styles.variantHeader}>
             <View>
-              <Text style={styles.sectionTitle}>
-                Variants
-              </Text>
-
-              <Text style={styles.sectionSubtitle}>
-                Add different sizes or options
-              </Text>
+              <Text style={styles.sectionTitle}>Variant Configurations</Text>
+              <Text style={styles.sectionSubtitle}>Define individual attributes for this item</Text>
             </View>
-
             <View style={styles.countBadge}>
-              <Text style={styles.countBadgeText}>
-                {variants.length}
-              </Text>
+              <Text style={styles.countBadgeText}>{variants.length}</Text>
             </View>
           </View>
 
           {variants.map((variant, index) => (
-            <View
-              key={index}
-              style={styles.variantCard}
-            >
-              {/* VARIANT HEADER */}
-
+            <View key={index} style={styles.variantCard}>
               <View style={styles.variantCardHeader}>
                 <View style={styles.variantNumber}>
-                  <Text
-                    style={
-                      styles.variantNumberText
-                    }
-                  >
-                    {index + 1}
-                  </Text>
+                  <Text style={styles.variantNumberText}>{index + 1}</Text>
                 </View>
-
-                <Text style={styles.variantTitle}>
-                  Variant {index + 1}
-                </Text>
+                <Text style={styles.variantTitle}>Variant Option #{index + 1}</Text>
 
                 {variants.length > 1 ? (
                   <TouchableOpacity
                     style={styles.removeButton}
-                    onPress={() =>
-                      removeVariant(index)
-                    }
-                    activeOpacity={0.75}
+                    onPress={() => removeVariant(index)}
+                    activeOpacity={0.7}
                   >
-                    <Trash2
-                      size={17}
-                      color={COLORS.danger}
-                    />
+                    <Trash2 size={16} color={COLORS.danger} />
                   </TouchableOpacity>
                 ) : null}
               </View>
 
-              {/* NAME */}
-
+              {/* VARIANT NAME */}
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>
-                  Variant Name
-                </Text>
-
+                <Text style={styles.inputLabel}>VARIANT NAME</Text>
                 <TextInput
                   value={variant.name}
-                  onChangeText={(value) =>
-                    updateVariant(
-                      index,
-                      'name',
-                      value
-                    )
-                  }
-                  placeholder="e.g. Regular, Cheese, Large"
-                  placeholderTextColor={
-                    COLORS.muted
-                  }
+                  onChangeText={(value) => updateVariant(index, 'name', value)}
+                  placeholder="e.g. Regular, Large, Spicy"
+                  placeholderTextColor={COLORS.muted}
                   style={styles.input}
                 />
               </View>
 
-              {/* PRICE ROW */}
+              {/* DESCRIPTION */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>DESCRIPTION (OPTIONAL)</Text>
+                <TextInput
+                  value={variant.description}
+                  onChangeText={(value) => updateVariant(index, 'description', value)}
+                  placeholder="e.g. Serves 1-2 people"
+                  placeholderTextColor={COLORS.muted}
+                  style={styles.input}
+                />
+              </View>
 
+              {/* PRICE & DISCOUNT ROW */}
               <View style={styles.priceRow}>
-                <View
-                  style={[
-                    styles.inputGroup,
-                    styles.priceInput,
-                  ]}
-                >
-                  <Text style={styles.inputLabel}>
-                    Price
-                  </Text>
-
-                  <View
-                    style={styles.priceInputWrapper}
-                  >
-                    <Text
-                      style={styles.currency}
-                    >
-                      ৳
-                    </Text>
-
+                <View style={[styles.inputGroup, styles.priceInput]}>
+                  <Text style={styles.inputLabel}>PRICE</Text>
+                  <View style={styles.priceInputWrapper}>
+                    <Text style={styles.currency}>৳</Text>
                     <TextInput
                       value={variant.price}
-                      onChangeText={(value) =>
-                        updateVariant(
-                          index,
-                          'price',
-                          value
-                        )
-                      }
-                      placeholder="190"
-                      placeholderTextColor={
-                        COLORS.muted
-                      }
+                      onChangeText={(value) => updateVariant(index, 'price', value)}
+                      placeholder="0.00"
+                      placeholderTextColor={COLORS.muted}
+                      keyboardDecimalPad
                       keyboardType="decimal-pad"
-                      style={
-                        styles.priceTextInput
-                      }
+                      style={styles.priceTextInput}
                     />
                   </View>
                 </View>
 
-                <View
-                  style={[
-                    styles.inputGroup,
-                    styles.priceInput,
-                  ]}
-                >
-                  <Text style={styles.inputLabel}>
-                    Discount Price
-                  </Text>
-
-                  <View
-                    style={styles.priceInputWrapper}
-                  >
-                    <Text
-                      style={styles.currency}
-                    >
-                      ৳
-                    </Text>
-
+                <View style={[styles.inputGroup, styles.priceInput]}>
+                  <Text style={styles.inputLabel}>DISCOUNT PRICE</Text>
+                  <View style={styles.priceInputWrapper}>
+                    <Text style={styles.currency}>৳</Text>
                     <TextInput
-                      value={
-                        variant.discountPrice
-                      }
-                      onChangeText={(value) =>
-                        updateVariant(
-                          index,
-                          'discountPrice',
-                          value
-                        )
-                      }
+                      value={variant.discountPrice}
+                      onChangeText={(value) => updateVariant(index, 'discountPrice', value)}
                       placeholder="Optional"
-                      placeholderTextColor={
-                        COLORS.muted
-                      }
+                      placeholderTextColor={COLORS.muted}
                       keyboardType="decimal-pad"
-                      style={
-                        styles.priceTextInput
-                      }
+                      style={styles.priceTextInput}
                     />
                   </View>
                 </View>
               </View>
 
-              {/* AVAILABILITY */}
-
+              {/* AVAILABILITY SWITCH */}
               <View style={styles.availabilityRow}>
-                <View>
-                  <Text
-                    style={
-                      styles.availabilityTitle
-                    }
-                  >
-                    Available
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.availabilitySubtitle
-                    }
-                  >
-                    Customers can order this variant
-                  </Text>
+                <View style={{ flex: 1, marginRight: 12 }}>
+                  <Text style={styles.availabilityTitle}>Active & Available</Text>
+                  <Text style={styles.availabilitySubtitle}>Enable clients to order this choice right away</Text>
                 </View>
-
                 <Switch
                   value={variant.isAvailable}
-                  onValueChange={(value) =>
-                    updateVariant(
-                      index,
-                      'isAvailable',
-                      value
-                    )
-                  }
-                  trackColor={{
-                    false: COLORS.border,
-                    true: '#A9D8BD',
-                  }}
-                  thumbColor={
-                    variant.isAvailable
-                      ? COLORS.primary
-                      : '#FFFFFF'
-                  }
+                  onValueChange={(value) => updateVariant(index, 'isAvailable', value)}
+                  trackColor={{ false: COLORS.border, true: '#A9D8BD' }}
+                  thumbColor={variant.isAvailable ? COLORS.primary : '#FFFFFF'}
                 />
               </View>
             </View>
           ))}
 
-          {/* ADD VARIANT */}
-
+          {/* ADD VARIANT BUTTON */}
           <TouchableOpacity
             style={styles.addVariantButton}
             onPress={addVariant}
             activeOpacity={0.8}
           >
             <View style={styles.addVariantIcon}>
-              <Plus
-                size={18}
-                color={COLORS.primary}
-              />
+              <Plus size={16} color={COLORS.primary} />
             </View>
-
-            <Text style={styles.addVariantText}>
-              Add Another Variant
-            </Text>
+            <Text style={styles.addVariantText}>Add Another Variant</Text>
           </TouchableOpacity>
         </View>
 
-        {/* ================= SUBMIT ================= */}
-
+        {/* SUBMIT BUTTON */}
         <TouchableOpacity
           style={[
             styles.submitButton,
-            (!selectedFood || submitting) &&
-              styles.submitButtonDisabled,
+            (!selectedFood || submitting) && styles.submitButtonDisabled,
           ]}
           activeOpacity={0.85}
           onPress={handleSubmit}
           disabled={!selectedFood || submitting}
         >
           {submitting ? (
-            <ActivityIndicator
-              size="small"
-              color={COLORS.white}
-            />
+            <ActivityIndicator size="small" color={COLORS.white} />
           ) : (
-            <Check
-              size={19}
-              color={COLORS.white}
-              strokeWidth={2.5}
-            />
+            <Check size={18} color={COLORS.white} strokeWidth={2.5} />
           )}
-
           <Text style={styles.submitButtonText}>
-            {submitting
-              ? 'Saving Variants...'
-              : 'Upload Variants'}
+            {submitting ? 'Saving Variants...' : 'Save & Publish Variants'}
           </Text>
         </TouchableOpacity>
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 30 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -841,509 +469,357 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
-
   container: {
-    paddingBottom: 30,
+    paddingBottom: 24,
   },
-
-  /* ================= HEADER ================= */
-
   header: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.card,
     paddingHorizontal: 20,
-    paddingTop: 18,
-    paddingBottom: 22,
-
+    paddingVertical: 18,
     flexDirection: 'row',
     alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
   },
-
-  headerIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
-    backgroundColor:
-      'rgba(255,255,255,0.12)',
-
+  headerIconWrapper: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: COLORS.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
-
-    marginRight: 12,
+    marginRight: 14,
   },
-
   headerTextContainer: {
     flex: 1,
   },
-
   headerTitle: {
-    color: COLORS.white,
-    fontSize: 20,
-    fontWeight: '800',
-    letterSpacing: -0.4,
-  },
-
-  headerSubtitle: {
-    color: 'rgba(255,255,255,0.65)',
-    fontSize: 11,
-    marginTop: 3,
-  },
-
-  /* ================= SECTION ================= */
-
-  section: {
-    marginHorizontal: 20,
-    marginTop: 23,
-  },
-
-  label: {
-    fontSize: 12,
-    fontWeight: '800',
     color: COLORS.text,
-    marginBottom: 9,
-  },
-
-  sectionTitle: {
     fontSize: 18,
     fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  headerSubtitle: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  section: {
+    marginHorizontal: 20,
+    marginTop: 20,
+  },
+  label: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: COLORS.textSecondary,
+    marginBottom: 8,
+    letterSpacing: 0.5,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '800',
     color: COLORS.text,
   },
-
   sectionSubtitle: {
-    fontSize: 11,
+    fontSize: 12,
     color: COLORS.textSecondary,
-    marginTop: 3,
+    marginTop: 2,
   },
-
-  /* ================= SELECT FOOD ================= */
-
   selectButton: {
-    minHeight: 65,
-    borderRadius: 16,
-    backgroundColor: COLORS.white,
-
+    minHeight: 58,
+    borderRadius: 14,
+    backgroundColor: COLORS.card,
     borderWidth: 1,
     borderColor: COLORS.border,
-
-    paddingHorizontal: 13,
-
+    paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 3,
+    elevation: 1,
   },
-
   selectButtonSelected: {
-    borderColor: '#B9D6C7',
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primaryLight + '30',
   },
-
   selectLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-  },
-
-  foodIcon: {
-    width: 39,
-    height: 39,
-    borderRadius: 12,
-    backgroundColor: COLORS.primaryLight,
-
-    alignItems: 'center',
-    justifyContent: 'center',
-
     marginRight: 10,
   },
-
+  foodIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: COLORS.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
   selectText: {
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '700',
     color: COLORS.text,
   },
-
   placeholderText: {
     color: COLORS.muted,
-    fontWeight: '600',
+    fontWeight: '500',
   },
-
   foodBasePrice: {
-    fontSize: 10,
+    fontSize: 11,
     color: COLORS.textSecondary,
-    marginTop: 3,
+    marginTop: 2,
   },
-
-  /* ================= FOOD LIST ================= */
-
   foodList: {
-    marginTop: 7,
-    backgroundColor: COLORS.white,
-
-    borderRadius: 16,
+    marginTop: 6,
+    backgroundColor: COLORS.card,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: COLORS.border,
-
     overflow: 'hidden',
   },
-
   foodOption: {
-    minHeight: 58,
+    minHeight: 52,
     paddingHorizontal: 14,
-
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-
   foodOptionSelected: {
     backgroundColor: COLORS.primaryLight,
   },
-
   foodOptionName: {
     fontSize: 13,
-    fontWeight: '800',
+    fontWeight: '700',
     color: COLORS.text,
   },
-
   foodOptionPrice: {
-    fontSize: 10,
+    fontSize: 11,
     color: COLORS.textSecondary,
-    marginTop: 3,
+    marginTop: 1,
   },
-
   foodLoading: {
-    minHeight: 70,
+    minHeight: 60,
     alignItems: 'center',
     justifyContent: 'center',
   },
-
   loadingText: {
     marginTop: 6,
     fontSize: 11,
     color: COLORS.textSecondary,
   },
-
   noFoodText: {
-    padding: 20,
+    padding: 16,
     textAlign: 'center',
     fontSize: 12,
     color: COLORS.textSecondary,
   },
-
-  /* ================= SELECTED FOOD ================= */
-
-  selectedFoodCard: {
-    marginHorizontal: 20,
-    marginTop: 14,
-
-    padding: 15,
-    borderRadius: 17,
-
-    backgroundColor: COLORS.primaryLight,
-
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-
-  selectedFoodLabel: {
-    fontSize: 9,
-    color: COLORS.textSecondary,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-
-  selectedFoodName: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: COLORS.primary,
-    marginTop: 3,
-  },
-
-  basePriceBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 9,
-    backgroundColor: COLORS.white,
-  },
-
-  basePriceBadgeText: {
-    fontSize: 10,
-    color: COLORS.primary,
-    fontWeight: '800',
-  },
-
-  /* ================= VARIANTS ================= */
-
   variantHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-
     marginBottom: 12,
   },
-
   countBadge: {
-    minWidth: 28,
-    height: 28,
-    borderRadius: 10,
-
+    paddingHorizontal: 10,
+    height: 26,
+    borderRadius: 8,
     backgroundColor: COLORS.primaryLight,
-
     alignItems: 'center',
     justifyContent: 'center',
   },
-
   countBadgeText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '800',
     color: COLORS.primary,
   },
-
   variantCard: {
-    backgroundColor: COLORS.white,
-
+    backgroundColor: COLORS.card,
     borderWidth: 1,
     borderColor: COLORS.border,
-
-    borderRadius: 19,
-
-    padding: 15,
+    borderRadius: 16,
+    padding: 16,
     marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 3,
+    elevation: 1,
   },
-
   variantCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-
-    marginBottom: 15,
+    marginBottom: 14,
   },
-
   variantNumber: {
-    width: 29,
-    height: 29,
-    borderRadius: 10,
-
+    width: 26,
+    height: 26,
+    borderRadius: 8,
     backgroundColor: COLORS.primary,
-
     alignItems: 'center',
     justifyContent: 'center',
-
-    marginRight: 9,
+    marginRight: 8,
   },
-
   variantNumberText: {
     color: COLORS.white,
     fontSize: 11,
-    fontWeight: '900',
+    fontWeight: '800',
   },
-
   variantTitle: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '800',
     color: COLORS.text,
   },
-
   removeButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-
+    width: 30,
+    height: 30,
+    borderRadius: 8,
     backgroundColor: '#FDECEC',
-
     alignItems: 'center',
     justifyContent: 'center',
   },
-
-  /* ================= INPUT ================= */
-
   inputGroup: {
-    marginBottom: 14,
+    marginBottom: 12,
   },
-
   inputLabel: {
     fontSize: 10,
     fontWeight: '800',
     color: COLORS.textSecondary,
-
-    marginBottom: 7,
+    marginBottom: 6,
+    letterSpacing: 0.3,
   },
-
   input: {
-    height: 46,
-
+    height: 44,
     borderWidth: 1,
     borderColor: COLORS.border,
-
-    borderRadius: 12,
-
-    backgroundColor: '#FCFDFC',
-
-    paddingHorizontal: 13,
-
+    borderRadius: 10,
+    backgroundColor: '#FAFBFA',
+    paddingHorizontal: 12,
     color: COLORS.text,
-
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '500',
   },
-
   priceRow: {
     flexDirection: 'row',
     gap: 10,
   },
-
   priceInput: {
     flex: 1,
   },
-
   priceInputWrapper: {
-    height: 46,
-
+    height: 44,
     borderWidth: 1,
     borderColor: COLORS.border,
-
-    borderRadius: 12,
-
-    backgroundColor: '#FCFDFC',
-
+    borderRadius: 10,
+    backgroundColor: '#FAFBFA',
     flexDirection: 'row',
     alignItems: 'center',
-
-    paddingHorizontal: 11,
+    paddingHorizontal: 10,
   },
-
   currency: {
     fontSize: 13,
-    fontWeight: '800',
+    fontWeight: '700',
     color: COLORS.primary,
-
-    marginRight: 5,
+    marginRight: 4,
   },
-
   priceTextInput: {
     flex: 1,
-
-    height: 44,
-
+    height: 40,
     padding: 0,
-
     color: COLORS.text,
-
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '600',
   },
-
-  /* ================= AVAILABILITY ================= */
-
   availabilityRow: {
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
-
-    paddingTop: 13,
-
+    paddingTop: 12,
+    marginTop: 4,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-
   availabilityTitle: {
-    fontSize: 11,
+    fontSize: 12,
     color: COLORS.text,
-    fontWeight: '800',
+    fontWeight: '700',
   },
-
   availabilitySubtitle: {
-    fontSize: 9,
+    fontSize: 10,
     color: COLORS.muted,
-    marginTop: 3,
+    marginTop: 2,
   },
-
-  /* ================= ADD ================= */
-
   addVariantButton: {
-    height: 50,
-
-    borderRadius: 14,
-
+    height: 48,
+    borderRadius: 12,
     borderWidth: 1,
     borderStyle: 'dashed',
     borderColor: '#B8CEC1',
-
-    backgroundColor: COLORS.primaryLight,
-
+    backgroundColor: COLORS.primaryLight + '50',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-
     gap: 8,
+    marginTop: 4,
   },
-
   addVariantIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 9,
-
+    width: 24,
+    height: 24,
+    borderRadius: 7,
     backgroundColor: COLORS.white,
-
     alignItems: 'center',
     justifyContent: 'center',
   },
-
   addVariantText: {
     fontSize: 12,
     fontWeight: '800',
     color: COLORS.primary,
   },
-
-  /* ================= SUBMIT ================= */
-
   submitButton: {
     marginHorizontal: 20,
-    marginTop: 25,
-
-    height: 53,
-
-    borderRadius: 16,
-
+    marginTop: 24,
+    height: 52,
+    borderRadius: 14,
     backgroundColor: COLORS.orange,
-
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-
     gap: 8,
+    shadowColor: COLORS.orange,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 3,
   },
-
   submitButtonDisabled: {
-    opacity: 0.45,
+    opacity: 0.5,
+    shadowOpacity: 0,
   },
-
   submitButtonText: {
     color: COLORS.white,
-    fontSize: 13,
-    fontWeight: '900',
+    fontSize: 14,
+    fontWeight: '800',
   },
-
-  /* ================= ERROR ================= */
-
   errorCard: {
     marginHorizontal: 20,
     marginTop: 16,
-
-    padding: 13,
-
-    borderRadius: 13,
-
+    padding: 12,
+    borderRadius: 10,
     backgroundColor: '#FDECEC',
     borderWidth: 1,
     borderColor: '#F4CACA',
   },
-
   errorText: {
     color: COLORS.danger,
     fontSize: 11,
-    lineHeight: 17,
+    lineHeight: 16,
+    fontWeight: '600',
   },
 });

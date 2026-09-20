@@ -52,7 +52,7 @@ export default function AppTabs() {
         </NativeTabs.Trigger.Label>
 
         <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/food.png')}
+          src={require('@/assets/images/tabIcons/variant.png')}
           renderingMode="template"
         />
       </NativeTabs.Trigger>
