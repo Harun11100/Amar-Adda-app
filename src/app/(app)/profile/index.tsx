@@ -144,82 +144,8 @@ export default function StaffProfileScreen() {
         </View>
 
         {/* Personal Information */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>
-              Personal Information
-            </Text>
-
-            <View style={styles.sectionIcon}>
-              <BadgeInfo
-                size={16}
-                color={COLORS.primary}
-              />
-            </View>
-          </View>
-
-          {/* Staff ID if available */}
-          {profile?.staffId ? (
-            <View style={styles.infoRow}>
-              <View style={styles.iconBox}>
-                <BadgeInfo
-                  size={18}
-                  color={COLORS.primary}
-                />
-              </View>
-
-              <View style={styles.infoContent}>
-                <Text style={styles.infoTitle}>Staff ID</Text>
-                <Text style={styles.infoValue}>{profile.staffId}</Text>
-              </View>
-            </View>
-          ) : null}
-
-          {/* Email */}
-          <View style={styles.infoRow}>
-            <View style={styles.iconBox}>
-              <Mail
-                size={18}
-                color={COLORS.primary}
-              />
-            </View>
-
-            <View style={styles.infoContent}>
-              <Text style={styles.infoTitle}>
-                Email Address
-              </Text>
-
-              <Text
-                style={styles.infoValue}
-                numberOfLines={1}
-                ellipsizeMode="tail"
-              >
-                {profile?.email || 'N/A'}
-              </Text>
-            </View>
-          </View>
-
-          {/* Phone */}
-          <View style={[styles.infoRow, styles.lastInfoRow]}>
-            <View style={styles.iconBox}>
-              <Phone
-                size={18}
-                color={COLORS.primary}
-              />
-            </View>
-
-            <View style={styles.infoContent}>
-              <Text style={styles.infoTitle}>
-                Phone Number
-              </Text>
-
-              <Text style={styles.infoValue}>
-                {profile?.phone || 'N/A'}
-              </Text>
-            </View>
-          </View>
-        </View>
-
+        
+      
         {/* Logout */}
         <TouchableOpacity
           style={styles.logoutButton}
