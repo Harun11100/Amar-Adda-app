@@ -286,15 +286,15 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <View style={styles.logo}>
-              <UtensilsCrossed
-                size={19}
-                color={COLORS.white}
-              />
+            <Image
+              source={require('@/assets/images/icon2.png')}
+              style={styles.logoImage}
+            />
             </View>
 
             <View>
               <Text style={styles.brandTitle}>
-                Amar Adda
+                Amar Adda cafe
               </Text>
 
               <Text style={styles.brandSubtitle}>
@@ -674,6 +674,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 11,
+  },
+  logoImage: {
+    width: 70,
+    height: 70,
   },
 
   brandTitle: {

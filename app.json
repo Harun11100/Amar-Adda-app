@@ -13,16 +13,16 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundImage": "./assets/images/adaptive-icon.png",
-        "monochromeImage": "./assets/images/adaptive-icon.png"
+        "foregroundImage": "./assets/images/icon2.png",
+        "backgroundImage": "./assets/images/icon2.png",
+        "monochromeImage": "./assets/images/icon2.png"
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.mdharun.amaradda"
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/adaptive-icon.png"
+      "favicon": "./assets/images/icon2.png"
     },
     "plugins": [
       "expo-router",
@@ -30,7 +30,7 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#208AEF",
-          "image": "./assets/images/adaptive-icon.png",
+          "image": "./assets/images/icon2.png",
           "imageWidth": 76
         }
       ]
