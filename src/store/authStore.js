@@ -7,9 +7,10 @@ export const useAuthStore = create((set) => ({
   isHydrated: false,
   isLoading: false,
 
+  // Restore session when app starts
   checkSavedSession: async () => {
     try {
-      const savedUser = await AsyncStorage.getItem("@user_session");
+      const savedUser = await AsyncStorage.getItem("@users_session");
 
       if (savedUser) {
         set({
@@ -26,12 +27,13 @@ export const useAuthStore = create((set) => ({
     }
   },
 
+  // Save authenticated user returned from backend
   login: async (userData) => {
     try {
       set({ isLoading: true });
 
       await AsyncStorage.setItem(
-        "@user_session",
+        "@users_session",
         JSON.stringify(userData)
       );
 
@@ -51,7 +53,7 @@ export const useAuthStore = create((set) => ({
 
   logout: async () => {
     try {
-      await AsyncStorage.removeItem("@user_session");
+      await AsyncStorage.removeItem("@users_session");
 
       set({
         user: null,

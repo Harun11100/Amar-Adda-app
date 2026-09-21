@@ -51,46 +51,46 @@ export default function Login() {
   // --------------------------------------------------
   // CHECK SAVED USER
   // --------------------------------------------------
-  useEffect(() => {
-    const checkLoggedInUser = async () => {
-      try {
-        const storedUser = await AsyncStorage.getItem("loggedInUser");
+  // useEffect(() => {
+  //   const checkLoggedInUser = async () => {
+  //     try {
+  //       const storedUser = await AsyncStorage.getItem("loggedInUser");
 
-        if (!storedUser) {
-          setIsCheckingUser(false);
-          return;
-        }
+  //       if (!storedUser) {
+  //         setIsCheckingUser(false);
+  //         return;
+  //       }
 
-        const user = JSON.parse(storedUser);
+  //       const user = JSON.parse(storedUser);
 
-        // Make sure stored data is actually valid
-        if (
-          user &&
-          user.email &&
-          user.role &&
-          user.status === "active"
-        ) {
-          console.log("Logged in user found:", user.email);
+  //       // Make sure stored data is actually valid
+  //       if (
+  //         user &&
+  //         user.email &&
+  //         user.role &&
+  //         user.status === "active"
+  //       ) {
+  //         console.log("Logged in user found:", user.email);
 
-          router.replace("/(app)");
-          return;
-        }
+  //         router.replace("/(app)");
+  //         return;
+  //       }
 
-        // Invalid/old user data
-        await AsyncStorage.removeItem("loggedInUser");
-        setIsCheckingUser(false);
-      } catch (error) {
-        console.error("Check logged in user error:", error);
+  //       // Invalid/old user data
+  //       await AsyncStorage.removeItem("loggedInUser");
+  //       setIsCheckingUser(false);
+  //     } catch (error) {
+  //       console.error("Check logged in user error:", error);
 
-        // If stored data is corrupted, remove it
-        await AsyncStorage.removeItem("loggedInUser");
+  //       // If stored data is corrupted, remove it
+  //       await AsyncStorage.removeItem("loggedInUser");
 
-        setIsCheckingUser(false);
-      }
-    };
+  //       setIsCheckingUser(false);
+  //     }
+  //   };
 
-    checkLoggedInUser();
-  }, [router]);
+  //   checkLoggedInUser();
+  // }, [router]);
 
   const getActiveColor = () => {
     switch (role) {
