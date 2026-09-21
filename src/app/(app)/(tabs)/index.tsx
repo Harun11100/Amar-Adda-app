@@ -270,70 +270,69 @@ export default function HomeScreen() {
    * ============================
    */
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <StatusBar
         barStyle="light-content"
         backgroundColor={COLORS.primary}
       />
+
+      {/* ================= FIXED HEADER ================= */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <View style={styles.logo}>
+            <Image
+              source={require('@/assets/images/icon2.png')}
+              style={styles.logoImage}
+            />
+          </View>
+
+          <View>
+            <Text style={styles.brandTitle}>
+              Amar Adda cafe
+            </Text>
+
+            <Text style={styles.brandSubtitle}>
+              Good Food • Good Mood
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.headerActions}>
+          {user?.role === 'admin' && (
+            <TouchableOpacity
+              style={styles.adminDashboardButton}
+              activeOpacity={0.75}
+              onPress={() =>
+                router.navigate('/admin/dashboard')
+              }
+            >
+              <ShieldEllipsisIcon
+                size={19}
+                color={COLORS.white}
+              />
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            style={styles.profileButton}
+            activeOpacity={0.75}
+            onPress={() =>
+              router.navigate('/profile')
+            }
+          >
+            <User2
+              size={19}
+              color={COLORS.primary}
+            />
+          </TouchableOpacity>
+        </View>
+      </View>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContainer}
         keyboardShouldPersistTaps="handled"
       >
-        {/* ================= HEADER ================= */}
-
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <View style={styles.logo}>
-            <Image
-              source={require('@/assets/images/icon2.png')}
-              style={styles.logoImage}
-            />
-            </View>
-
-            <View>
-              <Text style={styles.brandTitle}>
-                Amar Adda cafe
-              </Text>
-
-              <Text style={styles.brandSubtitle}>
-                Good Food • Good Mood
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.headerActions}>
-            {user?.role === 'admin' && (
-              <TouchableOpacity
-                style={styles.adminDashboardButton}
-                activeOpacity={0.75}
-                onPress={() =>
-                  router.navigate('/admin/dashboard')
-                }
-              >
-                <ShieldEllipsisIcon
-                  size={19}
-                  color={COLORS.white}
-                />
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity
-              style={styles.profileButton}
-              activeOpacity={0.75}
-              onPress={() =>
-                router.navigate('/profile')
-              }
-            >
-              <User2
-                size={19}
-                color={COLORS.primary}
-              />
-            </TouchableOpacity>
-          </View>
-        </View>
-
         {/* ================= WELCOME ================= */}
 
         <View style={styles.welcomeSection}>
@@ -641,11 +640,12 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.primary,
   },
 
   scrollContainer: {
     paddingBottom: 20,
+    backgroundColor: COLORS.background,
   },
 
   /* ================= HEADER ================= */
@@ -659,6 +659,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.primaryDark,
   },
 
   headerLeft: {

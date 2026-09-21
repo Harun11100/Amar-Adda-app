@@ -55,7 +55,7 @@ export default function StaffListScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
-
+  console.log(staffList, "staffList")
   /**
    * Fetch staff from backend
    */
@@ -104,6 +104,80 @@ export default function StaffListScreen() {
     setRefreshing(true);
     await fetchStaff();
   };
+
+  /**
+   * Delete Staff Handler
+   */
+
+const handleDeleteStaff = (staff: Staff) => {
+  Alert.alert(
+    "Delete Staff Member",
+    `Are you sure you want to delete ${staff.name}? This action cannot be undone.`,
+    [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            if (!API_URL) {
+              throw new Error("API URL is not configured.");
+            }
+
+            // Your staff data uses `id`, not `_id`
+            if (!staff.id) {
+              throw new Error("Staff ID is missing.");
+            }
+
+            const response = await fetch(
+              `${API_URL}/api/admin/User/deleteUser`,
+              {
+                method: "DELETE",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  userId: staff.id,
+                }),
+              }
+            );
+
+            const data = await response.json();
+
+            if (!response.ok || !data.success) {
+              throw new Error(
+                data?.message || "Failed to delete staff member."
+              );
+            }
+
+            // Remove deleted staff from local state
+            setStaffList((prevList) =>
+              prevList.filter((item) => item.id !== staff.id)
+            );
+
+            Alert.alert(
+              "Success",
+              data.message || "Staff member deleted successfully."
+            );
+          } catch (error: any) {
+            console.error("Delete staff error:", error);
+
+            Alert.alert(
+              "Error",
+              error?.message ||
+                "Something went wrong while deleting staff."
+            );
+          }
+        },
+      },
+    ]
+  );
+};
+
+
 
   /**
    * Search staff
@@ -466,7 +540,7 @@ export default function StaffListScreen() {
 
                 return (
                   <View
-                    key={staff.id}
+                    key={staff._id}
                     style={styles.staffCard}
                   >
                     {/* Top */}
@@ -587,25 +661,44 @@ export default function StaffListScreen() {
                         </Text>
                       </View>
 
-                      <TouchableOpacity
-                        activeOpacity={0.7}
-                        style={styles.manageBtn}
-                        onPress={() =>
-                          handleStaffDetails(staff)
-                        }
-                      >
-                        <Text
-                          style={styles.manageBtnText}
+                      <View style={styles.cardActionsRow}>
+                        <TouchableOpacity
+                          activeOpacity={0.7}
+                          style={styles.deleteBtn}
+                          onPress={() =>
+                            handleDeleteStaff(staff)
+                          }
                         >
-                          Details
-                        </Text>
+                          <Ionicons
+                            name="trash-outline"
+                            size={14}
+                            color={COLORS.adminRed}
+                          />
+                          <Text style={styles.deleteBtnText}>
+                            Delete
+                          </Text>
+                        </TouchableOpacity>
 
-                        <Ionicons
-                          name="chevron-forward"
-                          size={14}
-                          color={COLORS.primary}
-                        />
-                      </TouchableOpacity>
+                        <TouchableOpacity
+                          activeOpacity={0.7}
+                          style={styles.manageBtn}
+                          onPress={() =>
+                            handleStaffDetails(staff)
+                          }
+                        >
+                          <Text
+                            style={styles.manageBtnText}
+                          >
+                            Details
+                          </Text>
+
+                          <Ionicons
+                            name="chevron-forward"
+                            size={14}
+                            color={COLORS.primary}
+                          />
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   </View>
                 );
@@ -837,6 +930,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: COLORS.textMain,
+  },
+
+  cardActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+
+  deleteBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 4,
+  },
+
+  deleteBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: COLORS.adminRed,
   },
 
   manageBtn: {

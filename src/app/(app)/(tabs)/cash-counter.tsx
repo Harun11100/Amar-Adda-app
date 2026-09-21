@@ -361,14 +361,18 @@ export default function CashierScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <View style={styles.container}>
         <StatusBar barStyle="light-content" backgroundColor="#0B3C29" />
-        <Header count={0} />
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#FF7A00" />
-          <Text style={styles.loadingText}>Loading bills...</Text>
+        <SafeAreaView style={styles.safeAreaHeader} edges={["top"]}>
+          <Header count={0} />
+        </SafeAreaView>
+        <View style={styles.mainContent}>
+          <View style={styles.centerContainer}>
+            <ActivityIndicator size="large" color="#FF7A00" />
+            <Text style={styles.loadingText}>Loading bills...</Text>
+          </View>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
@@ -377,213 +381,218 @@ export default function CashierScreen() {
   // =======================================================
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0B3C29" />
 
-      <Header count={orders.length} />
+      {/* Fixed Header Container matching background */}
+      <SafeAreaView style={styles.safeAreaHeader} edges={["top"]}>
+        <Header count={orders.length} />
+      </SafeAreaView>
 
-      {/* SUCCESS */}
-      {successMessage && (
-        <View style={styles.successBanner}>
-          <CheckCircle color="#FFF" size={18} style={{ marginRight: 8 }} />
-          <Text style={styles.successText}>Payment received successfully!</Text>
-        </View>
-      )}
-
-      {/* ERROR */}
-      {error !== "" && (
-        <View style={styles.errorBanner}>
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity
-            onPress={() => fetchOrders(true)}
-            style={styles.retryButton}
-          >
-            <RefreshCw color="#FFF" size={15} />
-            <Text style={styles.retryText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      <ScrollView
-        contentContainerStyle={styles.scrollContainer}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor="#FF7A00"
-            colors={["#FF7A00"]}
-          />
-        }
-      >
-        {/* SECTION HEADER */}
-        <View style={styles.sectionHeader}>
-          <View>
-            <Text style={styles.sectionTitle}>Orders Awaiting Payment</Text>
-            <Text style={styles.sectionSubtitle}>
-              Completed orders ready for checkout
-            </Text>
+      <View style={styles.mainContent}>
+        {/* SUCCESS */}
+        {successMessage && (
+          <View style={styles.successBanner}>
+            <CheckCircle color="#FFF" size={18} style={{ marginRight: 8 }} />
+            <Text style={styles.successText}>Payment received successfully!</Text>
           </View>
+        )}
 
-          <View style={styles.pendingBadge}>
-            <Clock size={14} color="#FF7A00" />
-            <Text style={styles.pendingBadgeText}>{orders.length} Pending</Text>
-          </View>
-        </View>
-
-        {/* EMPTY */}
-        {orders.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <View style={styles.emptyIcon}>
-              <DollarSign color="#FF7A00" size={36} />
-            </View>
-
-            <Text style={styles.emptyText}>All bills are settled!</Text>
-            <Text style={styles.emptySubText}>
-              No completed unpaid orders are waiting for payment.
-            </Text>
-
+        {/* ERROR */}
+        {error !== "" && (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorText}>{error}</Text>
             <TouchableOpacity
-              style={styles.refreshEmptyButton}
               onPress={() => fetchOrders(true)}
-              disabled={refreshing}
-              activeOpacity={0.8}
+              style={styles.retryButton}
             >
-              {refreshing ? (
-                <ActivityIndicator size="small" color="#0B3C29" />
-              ) : (
-                <RefreshCw size={16} color="#0B3C29" />
-              )}
-              <Text style={styles.refreshEmptyText}>Refresh</Text>
+              <RefreshCw color="#FFF" size={15} />
+              <Text style={styles.retryText}>Retry</Text>
             </TouchableOpacity>
           </View>
-        ) : (
-          orders.map((order) => (
-            <View key={order._id} style={styles.billCard}>
-              {/* TOP */}
-              <View style={styles.billTopRow}>
-                <View style={styles.orderIdGroup}>
-                  <View style={styles.divider} />
-                  <Text style={styles.tableText}>
-                    {getOrderLocation(order)}
-                  </Text>
-                </View>
+        )}
 
-                <Text style={styles.totalAmountText}>
-                  ৳{order.subtotal.toFixed(2)}
-                </Text>
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor="#FF7A00"
+              colors={["#FF7A00"]}
+            />
+          }
+        >
+          {/* SECTION HEADER */}
+          <View style={styles.sectionHeader}>
+            <View>
+              <Text style={styles.sectionTitle}>Orders Awaiting Payment</Text>
+              <Text style={styles.sectionSubtitle}>
+                Completed orders ready for checkout
+              </Text>
+            </View>
+
+            <View style={styles.pendingBadge}>
+              <Clock size={14} color="#FF7A00" />
+              <Text style={styles.pendingBadgeText}>{orders.length} Pending</Text>
+            </View>
+          </View>
+
+          {/* EMPTY */}
+          {orders.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <View style={styles.emptyIcon}>
+                <DollarSign color="#FF7A00" size={36} />
               </View>
 
-              {/* COMPLETED */}
-              <View style={styles.completedBadge}>
-                <CheckCircle size={13} color="#059669" />
-                <Text style={styles.completedBadgeText}>Order Completed</Text>
-              </View>
+              <Text style={styles.emptyText}>All bills are settled!</Text>
+              <Text style={styles.emptySubText}>
+                No completed unpaid orders are waiting for payment.
+              </Text>
 
-              {/* META */}
-              <View style={styles.metaRow}>
-                <View style={styles.metaItem}>
-                  <User size={13} color="#6B7280" />
-                  <Text style={styles.metaText}>Order placed by : {getStaffName(order)}</Text>
-                </View>
-
-                <View style={styles.metaItem}>
-                  <Clock size={13} color="#6B7280" />
-                  <Text style={styles.metaText}>
-                    {formatOrderTime(order.updatedAt || order.createdAt)}
-                  </Text>
-                </View>
-              </View>
-
-              {/* CUSTOMER */}
-              {order.customer?.name &&
-                order.customer.name !== "Walk-in Customer" && (
-                  <View style={styles.customerRow}>
-                    <User size={13} color="#6B7280" />
-                    <Text style={styles.customerInfo}>
-                      {order.customer.name}
+              <TouchableOpacity
+                style={styles.refreshEmptyButton}
+                onPress={() => fetchOrders(true)}
+                disabled={refreshing}
+                activeOpacity={0.8}
+              >
+                {refreshing ? (
+                  <ActivityIndicator size="small" color="#0B3C29" />
+                ) : (
+                  <RefreshCw size={16} color="#0B3C29" />
+                )}
+                <Text style={styles.refreshEmptyText}>Refresh</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            orders.map((order) => (
+              <View key={order._id} style={styles.billCard}>
+                {/* TOP */}
+                <View style={styles.billTopRow}>
+                  <View style={styles.orderIdGroup}>
+                    <View style={styles.divider} />
+                    <Text style={styles.tableText}>
+                      {getOrderLocation(order)}
                     </Text>
-                    {order.customer.phone && (
-                      <Text style={styles.customerPhone}>
-                        • {order.customer.phone}
+                  </View>
+
+                  <Text style={styles.totalAmountText}>
+                    ৳{order.subtotal.toFixed(2)}
+                  </Text>
+                </View>
+
+                {/* COMPLETED */}
+                <View style={styles.completedBadge}>
+                  <CheckCircle size={13} color="#059669" />
+                  <Text style={styles.completedBadgeText}>Order Completed</Text>
+                </View>
+
+                {/* META */}
+                <View style={styles.metaRow}>
+                  <View style={styles.metaItem}>
+                    <User size={13} color="#6B7280" />
+                    <Text style={styles.metaText}>Order placed by : {getStaffName(order)}</Text>
+                  </View>
+
+                  <View style={styles.metaItem}>
+                    <Clock size={13} color="#6B7280" />
+                    <Text style={styles.metaText}>
+                      {formatOrderTime(order.updatedAt || order.createdAt)}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* CUSTOMER */}
+                {order.customer?.name &&
+                  order.customer.name !== "Walk-in Customer" && (
+                    <View style={styles.customerRow}>
+                      <User size={13} color="#6B7280" />
+                      <Text style={styles.customerInfo}>
+                        {order.customer.name}
                       </Text>
-                    )}
+                      {order.customer.phone && (
+                        <Text style={styles.customerPhone}>
+                          • {order.customer.phone}
+                        </Text>
+                      )}
+                    </View>
+                  )}
+
+                {/* ITEMS */}
+                <View style={styles.itemListPreview}>
+                  {order.items.map((item) => (
+                    <View key={item._id} style={styles.itemPreviewContainer}>
+                      <View style={styles.itemPreviewRow}>
+                        <Text
+                          style={styles.itemPreviewText}
+                          numberOfLines={1}
+                        >
+                          • {item.quantity}x {item.name}
+                        </Text>
+                        <Text style={styles.itemPrice}>
+                          ৳{(item.price * item.quantity).toFixed(2)}
+                        </Text>
+                      </View>
+
+                      {item.variant?.name && (
+                        <Text style={styles.variantText}>
+                          Variant: {item.variant.name}
+                        </Text>
+                      )}
+
+                      {item.customizations && (
+                        <Text
+                          style={styles.customizationText}
+                          numberOfLines={2}
+                        >
+                          Note: {item.customizations}
+                        </Text>
+                      )}
+                    </View>
+                  ))}
+                </View>
+
+                {/* ORDER NOTE */}
+                {order.notes?.trim() && (
+                  <View style={styles.notesBox}>
+                    <Text style={styles.notesLabel}>Order Note</Text>
+                    <Text style={styles.notesText}>{order.notes}</Text>
                   </View>
                 )}
 
-              {/* ITEMS */}
-              <View style={styles.itemListPreview}>
-                {order.items.map((item) => (
-                  <View key={item._id} style={styles.itemPreviewContainer}>
-                    <View style={styles.itemPreviewRow}>
-                      <Text
-                        style={styles.itemPreviewText}
-                        numberOfLines={1}
-                      >
-                        • {item.quantity}x {item.name}
-                      </Text>
-                      <Text style={styles.itemPrice}>
-                        ৳{(item.price * item.quantity).toFixed(2)}
-                      </Text>
-                    </View>
-
-                    {item.variant?.name && (
-                      <Text style={styles.variantText}>
-                        Variant: {item.variant.name}
-                      </Text>
-                    )}
-
-                    {item.customizations && (
-                      <Text
-                        style={styles.customizationText}
-                        numberOfLines={2}
-                      >
-                        Note: {item.customizations}
-                      </Text>
-                    )}
+                {/* DISCOUNT */}
+                {order.discount > 0 && (
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Discount</Text>
+                    <Text style={styles.discountText}>
+                      -৳{order.discount.toFixed(2)}
+                    </Text>
                   </View>
-                ))}
-              </View>
+                )}
 
-              {/* ORDER NOTE */}
-              {order.notes?.trim() && (
-                <View style={styles.notesBox}>
-                  <Text style={styles.notesLabel}>Order Note</Text>
-                  <Text style={styles.notesText}>{order.notes}</Text>
-                </View>
-              )}
-
-              {/* DISCOUNT */}
-              {order.discount > 0 && (
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Discount</Text>
-                  <Text style={styles.discountText}>
-                    -৳{order.discount.toFixed(2)}
+                {/* CHECKOUT */}
+                <TouchableOpacity
+                  style={styles.checkoutButton}
+                  onPress={() => openPaymentModal(order)}
+                  activeOpacity={0.8}
+                >
+                  <DollarSign
+                    color="#FFF"
+                    size={19}
+                    style={{ marginRight: 5 }}
+                  />
+                  <Text style={styles.checkoutButtonText}>
+                    Proceed to Checkout
                   </Text>
-                </View>
-              )}
+                </TouchableOpacity>
+              </View>
+            ))
+          )}
 
-              {/* CHECKOUT */}
-              <TouchableOpacity
-                style={styles.checkoutButton}
-                onPress={() => openPaymentModal(order)}
-                activeOpacity={0.8}
-              >
-                <DollarSign
-                  color="#FFF"
-                  size={19}
-                  style={{ marginRight: 5 }}
-                />
-                <Text style={styles.checkoutButtonText}>
-                  Proceed to Checkout
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ))
-        )}
-
-        <View style={{ height: 40 }} />
-      </ScrollView>
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      </View>
 
       {/* ===================================================
           PAYMENT MODAL
@@ -812,7 +821,7 @@ export default function CashierScreen() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -821,7 +830,14 @@ export default function CashierScreen() {
 // =========================================================
 
 const styles = StyleSheet.create({
-  safeArea: {
+  container: {
+    flex: 1,
+    backgroundColor: "#0B3C29", // Matches header background for the top notch area
+  },
+  safeAreaHeader: {
+    backgroundColor: "#0B3C29",
+  },
+  mainContent: {
     flex: 1,
     backgroundColor: "#F9FAFB",
   },
@@ -841,7 +857,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
     backgroundColor: "#0B3C29",
   },
   headerLeft: {
@@ -849,9 +865,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   headerIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
+    width: 42,
+    height: 42,
+    borderRadius: 10,
     backgroundColor: "rgba(255,255,255,0.15)",
     justifyContent: "center",
     alignItems: "center",
@@ -990,14 +1006,16 @@ const styles = StyleSheet.create({
   },
   billCard: {
     backgroundColor: "#FFF",
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
     marginBottom: 16,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
   },
   billTopRow: {
     flexDirection: "row",
@@ -1010,10 +1028,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   divider: {
-    width: 1,
-    height: 12,
-    backgroundColor: "#D1D5DB",
-    marginHorizontal: 8,
+    width: 3,
+    height: 14,
+    backgroundColor: "#FF7A00",
+    borderRadius: 2,
+    marginRight: 6,
   },
   tableText: {
     fontSize: 14,
@@ -1031,7 +1050,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#ECFDF5",
     alignSelf: "flex-start",
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 6,
     marginBottom: 10,
   },
@@ -1138,14 +1157,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
   },
   checkoutButtonText: {
     color: "#FFF",
     fontWeight: "600",
     fontSize: 14,
   },
+  // Modal Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -1153,38 +1173,44 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: "#FFF",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: "85%",
-    paddingBottom: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 40,
+    maxHeight: "90%",
   },
   modalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 16,
+    marginBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
+    borderBottomColor: "#F3F4F6",
+    paddingBottom: 12,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#1F2937",
+    color: "#111827",
   },
   modalOrderNumber: {
     fontSize: 12,
     color: "#6B7280",
+    marginTop: 2,
   },
   closeButton: {
     padding: 4,
+    backgroundColor: "#F3F4F6",
+    borderRadius: 20,
   },
   modalScrollContent: {
-    padding: 16,
+    paddingBottom: 20,
   },
   modalInfoCard: {
-    backgroundColor: "#F9FAFB",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 12,
     padding: 12,
-    borderRadius: 8,
     marginBottom: 16,
   },
   modalInfoRow: {
@@ -1194,15 +1220,16 @@ const styles = StyleSheet.create({
   },
   modalInfoText: {
     fontSize: 13,
-    color: "#374151",
+    color: "#334155",
     marginLeft: 8,
   },
   receiptBox: {
+    backgroundColor: "#F9FAFB",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 20,
     borderWidth: 1,
     borderColor: "#E5E7EB",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 16,
   },
   receiptSectionTitle: {
     fontSize: 14,
@@ -1220,20 +1247,22 @@ const styles = StyleSheet.create({
   receiptItemName: {
     fontSize: 13,
     color: "#374151",
+    fontWeight: "500",
     flex: 1,
   },
   receiptItemPrice: {
     fontSize: 13,
     color: "#374151",
-    fontWeight: "500",
   },
   receiptVariant: {
     fontSize: 11,
     color: "#6B7280",
+    marginLeft: 8,
   },
   receiptCustomization: {
     fontSize: 11,
     color: "#D97706",
+    marginLeft: 8,
   },
   receiptDivider: {
     height: 1,
@@ -1251,7 +1280,8 @@ const styles = StyleSheet.create({
   },
   receiptValue: {
     fontSize: 13,
-    color: "#374151",
+    color: "#1F2937",
+    fontWeight: "500",
   },
   finalRow: {
     marginTop: 6,
@@ -1263,10 +1293,10 @@ const styles = StyleSheet.create({
   finalLabel: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#1F2937",
+    color: "#111827",
   },
   finalVal: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "700",
     color: "#059669",
   },
@@ -1279,52 +1309,51 @@ const styles = StyleSheet.create({
   paymentMethodsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 16,
+    marginBottom: 20,
   },
   methodCard: {
     flex: 1,
-    borderWidth: 1,
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1.5,
     borderColor: "#E5E7EB",
-    borderRadius: 8,
+    borderRadius: 12,
     paddingVertical: 12,
     alignItems: "center",
     marginHorizontal: 4,
-    backgroundColor: "#FFF",
   },
   methodCardActive: {
     borderColor: "#FF7A00",
     backgroundColor: "#FFF7ED",
   },
   methodText: {
-    fontSize: 12,
-    color: "#6B7280",
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#4B5563",
     marginTop: 6,
-    fontWeight: "500",
   },
   methodTextActive: {
     color: "#FF7A00",
-    fontWeight: "700",
   },
   completePaymentBtn: {
     backgroundColor: "#059669",
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginBottom: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
   },
   disabledButton: {
-    opacity: 0.6,
+    opacity: 0.7,
   },
   completePaymentText: {
     color: "#FFF",
-    fontWeight: "700",
     fontSize: 15,
+    fontWeight: "700",
   },
   paymentConfirmationText: {
-    fontSize: 11,
-    color: "#6B7280",
     textAlign: "center",
+    fontSize: 11,
+    color: "#9CA3AF",
+    marginTop: 10,
   },
 });

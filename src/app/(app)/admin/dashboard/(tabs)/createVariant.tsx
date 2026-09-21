@@ -232,23 +232,23 @@ export default function CreateFoodVariantScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+      {/* FIXED HEADER */}
+      <View style={styles.header}>
+        <View style={styles.headerIconWrapper}>
+          <UtensilsCrossed size={20} color={COLORS.primary} />
+        </View>
+        <View style={styles.headerTextContainer}>
+          <Text style={styles.headerTitle}>Food Variants</Text>
+          <Text style={styles.headerSubtitle}>Customize sizes, portions & options</Text>
+        </View>
+      </View>
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
-        {/* HEADER */}
-        <View style={styles.header}>
-          <View style={styles.headerIconWrapper}>
-            <UtensilsCrossed size={20} color={COLORS.primary} />
-          </View>
-          <View style={styles.headerTextContainer}>
-            <Text style={styles.headerTitle}>Food Variants</Text>
-            <Text style={styles.headerSubtitle}>Customize sizes, portions & options</Text>
-          </View>
-        </View>
-
         {/* ERROR BANNER */}
         {error ? (
           <View style={styles.errorCard}>
@@ -386,7 +386,6 @@ export default function CreateFoodVariantScreen() {
                       onChangeText={(value) => updateVariant(index, 'price', value)}
                       placeholder="0.00"
                       placeholderTextColor={COLORS.muted}
-                      keyboardDecimalPad
                       keyboardType="decimal-pad"
                       style={styles.priceTextInput}
                     />
@@ -467,18 +466,19 @@ export default function CreateFoodVariantScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.primary,
   },
   container: {
     paddingBottom: 24,
+    backgroundColor: COLORS.background,
   },
   header: {
-    backgroundColor: COLORS.card,
     paddingHorizontal: 20,
     paddingVertical: 18,
     flexDirection: 'row',
     alignItems: 'center',
     borderBottomWidth: 1,
+    backgroundColor: COLORS.primary,
     borderBottomColor: COLORS.border,
   },
   headerIconWrapper: {
@@ -494,13 +494,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerTitle: {
-    color: COLORS.text,
+    color: '#d4d4d4',
     fontSize: 18,
     fontWeight: '800',
     letterSpacing: -0.3,
   },
   headerSubtitle: {
-    color: COLORS.textSecondary,
+    color: '#898989',
     fontSize: 12,
     marginTop: 2,
   },

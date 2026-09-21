@@ -35,7 +35,7 @@ export default function RootLayout() {
   if (!isHydrated) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3B82F6" />
+        <ActivityIndicator size="large" color="#f26c19" />
       </View>
     );
   }
