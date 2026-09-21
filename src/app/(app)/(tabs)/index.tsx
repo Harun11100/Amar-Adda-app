@@ -25,16 +25,15 @@ import {
   User2,
   Clock3,
   MapPin,
-  LayoutDashboard,
   RefreshCw,
   Search,
   X,
-  ShellIcon,
   ShieldEllipsisIcon,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuthStore } from '../../../store/authStore'; // Update path as needed for your project structure
+
 const { width } = Dimensions.get('window');
 
 const API_URL = Constants.expoConfig?.extra?.API_URL;
@@ -81,25 +80,18 @@ const getCategoryIcon = (category: string) => {
   switch (category) {
     case 'Appetizers':
       return UtensilsCrossed;
-
     case 'Main Course':
       return Soup;
-
     case 'Fast Food':
       return Pizza;
-
     case 'Beverages':
       return Coffee;
-
     case 'Desserts':
       return Cake;
-
     case 'Snacks':
       return Cookie;
-
     case 'Specials':
       return Drumstick;
-
     default:
       return UtensilsCrossed;
   }
@@ -108,28 +100,22 @@ const getCategoryIcon = (category: string) => {
 export default function HomeScreen() {
   const router = useRouter();
 
+  // Pull user data and session restore methods from global authStore
+  const user = useAuthStore((state) => state.user);
+  const isHydrated = useAuthStore((state) => state.isHydrated);
+  const checkSavedSession = useAuthStore((state) => state.checkSavedSession);
+
   const [foods, setFoods] = useState<Food[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
-  const [userData, setUserData]=useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
-   useEffect(() => {
-    const loadUserData = async () => {
-      try {
-        const storedUser = await AsyncStorage.getItem('loggedInUser');
-        if (storedUser) {
-          const parsedData = JSON.parse(storedUser);
-          setUserData(parsedData);
-        }
-      } catch (error) {
-        console.error('Failed to load user data from AsyncStorage:', error);
-      }
-    };
 
-    loadUserData();
+  useEffect(() => {
+    checkSavedSession();
   }, []);
+
   /*
    * ============================
    * FETCH FOOD ITEMS
@@ -191,35 +177,6 @@ export default function HomeScreen() {
 
   /*
    * ============================
-   * DYNAMIC CATEGORIES
-   * ============================
-   */
-  const categories = useMemo(() => {
-    const uniqueCategories = Array.from(
-      new Set(
-        availableFoods
-          .map((food) => food.category)
-          .filter(Boolean)
-      )
-    );
-
-    return [
-      {
-        id: 'all',
-        name: 'All',
-        icon: UtensilsCrossed,
-      },
-
-      ...uniqueCategories.map((category) => ({
-        id: category,
-        name: category,
-        icon: getCategoryIcon(category),
-      })),
-    ];
-  }, [availableFoods]);
-
-  /*
-   * ============================
    * FILTER FOOD
    * ============================
    */
@@ -277,7 +234,7 @@ export default function HomeScreen() {
    * LOADING
    * ============================
    */
-  if (loading) {
+  if (loading || !isHydrated) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar
@@ -347,23 +304,20 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.headerActions}>
-            {
-              userData.role === "admin" && (
-            <TouchableOpacity
-              style={styles.adminDashboardButton}
-              activeOpacity={0.75}
-              onPress={() =>
-                router.navigate('/admin/dashboard')
-              }
-            >
-              <ShieldEllipsisIcon
-                size={19}
-                color={COLORS.white}
-              />
-            </TouchableOpacity>
-              )
-            }
-        
+            {user?.role === 'admin' && (
+              <TouchableOpacity
+                style={styles.adminDashboardButton}
+                activeOpacity={0.75}
+                onPress={() =>
+                  router.navigate('/admin/dashboard')
+                }
+              >
+                <ShieldEllipsisIcon
+                  size={19}
+                  color={COLORS.white}
+                />
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
               style={styles.profileButton}
@@ -937,6 +891,7 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginTop: 3,
   },
+
   /* ================= FOOD CARD ================= */
 
   foodCard: {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -14,7 +14,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import Constants from "expo-constants";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useAuthStore } from "@/store/authStore";
 
 const API_URL = Constants.expoConfig?.extra?.API_URL;
 
@@ -34,6 +34,7 @@ type Role = "waiter" | "chef" | "admin";
 
 export default function Login() {
   const router = useRouter();
+  const loginStore = useAuthStore((state) => state.login);
 
   const [role, setRole] = useState<Role>("waiter");
   const [email, setEmail] = useState("");
@@ -46,51 +47,6 @@ export default function Login() {
   >(null);
 
   const [isLoading, setIsLoading] = useState(false);
-  const [isCheckingUser, setIsCheckingUser] = useState(true);
-
-  // --------------------------------------------------
-  // CHECK SAVED USER
-  // --------------------------------------------------
-  // useEffect(() => {
-  //   const checkLoggedInUser = async () => {
-  //     try {
-  //       const storedUser = await AsyncStorage.getItem("loggedInUser");
-
-  //       if (!storedUser) {
-  //         setIsCheckingUser(false);
-  //         return;
-  //       }
-
-  //       const user = JSON.parse(storedUser);
-
-  //       // Make sure stored data is actually valid
-  //       if (
-  //         user &&
-  //         user.email &&
-  //         user.role &&
-  //         user.status === "active"
-  //       ) {
-  //         console.log("Logged in user found:", user.email);
-
-  //         router.replace("/(app)");
-  //         return;
-  //       }
-
-  //       // Invalid/old user data
-  //       await AsyncStorage.removeItem("loggedInUser");
-  //       setIsCheckingUser(false);
-  //     } catch (error) {
-  //       console.error("Check logged in user error:", error);
-
-  //       // If stored data is corrupted, remove it
-  //       await AsyncStorage.removeItem("loggedInUser");
-
-  //       setIsCheckingUser(false);
-  //     }
-  //   };
-
-  //   checkLoggedInUser();
-  // }, [router]);
 
   const getActiveColor = () => {
     switch (role) {
@@ -181,17 +137,14 @@ export default function Login() {
       };
 
       // --------------------------------------------------
-      // SAVE USER TO ASYNC STORAGE
+      // USE AUTH STORE TO SAVE & UPDATE STATE
       // --------------------------------------------------
-      await AsyncStorage.setItem(
-        "loggedInUser",
-        JSON.stringify(userData)
-      );
+      await loginStore(userData);
 
-      console.log("User saved to AsyncStorage:", userData);
+      console.log("User logged in and saved via Zustand:", userData);
 
       // --------------------------------------------------
-      // REDIRECT
+      // REDIRECT (RootLayout will handle this too based on state)
       // --------------------------------------------------
       router.replace("/(app)");
     } catch (error) {
@@ -204,24 +157,6 @@ export default function Login() {
       setIsLoading(false);
     }
   };
-
-  // --------------------------------------------------
-  // CHECKING STORED USER
-  // --------------------------------------------------
-  if (isCheckingUser) {
-    return (
-      <View style={styles.checkingContainer}>
-        <ActivityIndicator
-          size="large"
-          color={COLORS.emeraldGreen}
-        />
-
-        <Text style={styles.checkingText}>
-          Checking login...
-        </Text>
-      </View>
-    );
-  }
 
   return (
     <KeyboardAvoidingView
@@ -517,20 +452,6 @@ export default function Login() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-
-  checkingContainer: {
-    flex: 1,
-    backgroundColor: COLORS.primaryDark,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  checkingText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "600",
-    marginTop: 12,
   },
 
   backgroundImage: {

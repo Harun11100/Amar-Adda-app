@@ -19,6 +19,7 @@ import {
 } from 'lucide-react-native';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuthStore } from '@/store/authStore';
 
 const COLORS = {
   primary: '#0B3C29',
@@ -45,6 +46,9 @@ type StaffProfile = {
 export default function StaffProfileScreen() {
   const [profile, setProfile] = useState<StaffProfile | null>(null);
 
+  // Retrieve auth store logout or clear session function if available
+  const logoutStore = useAuthStore((state: any) => state.logout || state.clearAuth || state.reset);
+
   useEffect(() => {
     const loadUserData = async () => {
       try {
@@ -63,9 +67,19 @@ export default function StaffProfileScreen() {
 
   const handleLogout = async () => {
     try {
+      // Remove manual profile storage key
       await AsyncStorage.removeItem('loggedInUser');
+      
+      // Clear all related user session data from AsyncStorage
+      await AsyncStorage.removeItem('auth-storage'); // Standard Zustand persist storage key
+      await AsyncStorage.clear(); // Alternatively, clear storage or targeted keys if needed
+
+      // Clear Zustand store session if function exists
+      if (typeof logoutStore === 'function') {
+        logoutStore();
+      }
     } catch (error) {
-      console.error('Failed to clear AsyncStorage on logout:', error);
+      console.error('Failed to clear AsyncStorage and session on logout:', error);
     }
     router.push('/stuffLogin');
   };
@@ -103,11 +117,7 @@ export default function StaffProfileScreen() {
         <View style={styles.profileCard}>
           <View style={styles.avatarWrapper}>
             <Image
-              source={{
-                uri:
-                  profile?.avatar ||
-                  'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=400&auto=format&fit=crop',
-              }}
+              source={require('@/assets/images/avatar.png')}
               style={styles.avatarImage}
             />
 

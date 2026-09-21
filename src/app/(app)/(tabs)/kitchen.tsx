@@ -27,6 +27,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Constants from "expo-constants";
 
+// Import your global auth store
+import { useAuthStore } from "../../../store/authStore"; // Adjust path as needed
+
 const API_URL = Constants.expoConfig?.extra?.API_URL;
 
 // ============================================================
@@ -93,9 +96,7 @@ type Order = {
     | "due";
 
   staffName?: string;
-
   staff?: string | null;
-
   notes: string;
 
   createdAt: string;
@@ -110,7 +111,6 @@ const filterTabs: {
   label: string;
   value: "pending" | OrderStatus;
 }[] = [
- 
   {
     label: "Pending",
     value: "pending",
@@ -129,9 +129,7 @@ const filterTabs: {
 // FORMAT ORDER TIME
 // ============================================================
 
-const formatOrderTime = (
-  dateString: string
-) => {
+const formatOrderTime = (dateString: string) => {
   if (!dateString) {
     return "";
   }
@@ -152,22 +150,16 @@ const formatOrderTime = (
 // STATUS LABEL
 // ============================================================
 
-const getStatusLabel = (
-  status: OrderStatus
-) => {
+const getStatusLabel = (status: OrderStatus) => {
   switch (status) {
     case "pending":
       return "Pending";
-
     case "preparing":
       return "Preparing";
-
     case "completed":
       return "Completed";
-
     case "cancelled":
       return "Cancelled";
-
     default:
       return status;
   }
@@ -183,10 +175,8 @@ const getNextStatus = (
   switch (currentStatus) {
     case "pending":
       return "preparing";
-
     case "preparing":
       return "completed";
-
     default:
       return null;
   }
@@ -196,16 +186,12 @@ const getNextStatus = (
 // NEXT ACTION LABEL
 // ============================================================
 
-const getNextActionLabel = (
-  currentStatus: OrderStatus
-) => {
+const getNextActionLabel = (currentStatus: OrderStatus) => {
   switch (currentStatus) {
     case "pending":
       return "Start Preparing";
-
     case "preparing":
       return "Mark Completed";
-
     default:
       return "";
   }
@@ -216,24 +202,15 @@ const getNextActionLabel = (
 // ============================================================
 
 export default function KitchenScreen() {
-  const [orders, setOrders] =
-    useState<Order[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [selectedFilter, setSelectedFilter] = useState<"pending" | OrderStatus>("pending");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
 
-  const [
-    selectedFilter,
-    setSelectedFilter,
-  ] = useState<"pending" | OrderStatus>("pending");
-
-  const [isLoading, setIsLoading] =
-    useState(true);
-
-  const [isRefreshing, setIsRefreshing] =
-    useState(false);
-
-  const [
-    updatingOrderId,
-    setUpdatingOrderId,
-  ] = useState<string | null>(null);
+  // Retrieve user role dynamically from authStore
+  // (Change state.userRole or state.user?.role to match your store structure)
+  const userRole = useAuthStore((state: any) => state.userRole || state.user?.role);
 
   // ==========================================================
   // FETCH ORDERS
@@ -335,15 +312,24 @@ export default function KitchenScreen() {
   }, [fetchOrders, isRefreshing]);
 
   // ==========================================================
-  // UPDATE ORDER STATUS
+  // UPDATE ORDER STATUS (WITH ROLE CHECK)
   // ==========================================================
 
   const handleUpdateStatus = async (
     orderId: string,
     currentStatus: OrderStatus
   ) => {
-    const nextStatus =
-      getNextStatus(currentStatus);
+    // Check if user role is authorized (only 'chef' or 'admin')
+    const normalizedRole = typeof userRole === "string" ? userRole.toLowerCase() : "";
+    if (normalizedRole !== "chef" && normalizedRole !== "admin") {
+      Alert.alert(
+        "Access Denied",
+        "Only chefs and administrators are authorized to update order statuses from the kitchen screen."
+      );
+      return;
+    }
+
+    const nextStatus = getNextStatus(currentStatus);
 
     if (!nextStatus) {
       return;
@@ -365,12 +351,10 @@ export default function KitchenScreen() {
         `${API_URL}/api/admin/order/updateOrderStatus`,
         {
           method: "PATCH",
-
           headers: {
             Accept: "application/json",
             "Content-Type": "application/json",
           },
-
           body: JSON.stringify({
             orderId,
             orderStatus: nextStatus,
@@ -398,18 +382,14 @@ export default function KitchenScreen() {
         );
       }
 
-      // ------------------------------------------------------
       // Update locally
-      // ------------------------------------------------------
-
       setOrders(
         (previousOrders) =>
           previousOrders.map((order) =>
             order._id === orderId
               ? {
                   ...order,
-                  orderStatus:
-                    nextStatus,
+                  orderStatus: nextStatus,
                 }
               : order
           )
@@ -457,10 +437,7 @@ export default function KitchenScreen() {
         backgroundColor="#0B3C29"
       />
 
-      {/* =====================================================
-          HEADER
-      ====================================================== */}
-
+      {/* HEADER */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <ChefHat
@@ -472,15 +449,11 @@ export default function KitchenScreen() {
           />
 
           <View>
-            <Text
-              style={styles.headerTitle}
-            >
+            <Text style={styles.headerTitle}>
               Kitchen Display System
             </Text>
 
-            <Text
-              style={styles.headerSubtitle}
-            >
+            <Text style={styles.headerSubtitle}>
               Live Order Queue & Preparation
             </Text>
           </View>
@@ -488,31 +461,21 @@ export default function KitchenScreen() {
 
         <View style={styles.liveIndicator}>
           <View style={styles.liveDot} />
-
           <Text style={styles.liveText}>
             LIVE
           </Text>
         </View>
       </View>
 
-      {/* =====================================================
-          FILTER + REFRESH
-      ====================================================== */}
-
+      {/* FILTER + REFRESH */}
       <View style={styles.filterWrapper}>
         <ScrollView
           horizontal
-          showsHorizontalScrollIndicator={
-            false
-          }
-          contentContainerStyle={
-            styles.filterScroll
-          }
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterScroll}
         >
           {filterTabs.map((tab) => {
-            const isSelected =
-              selectedFilter ===
-              tab.value;
+            const isSelected = selectedFilter === tab.value;
 
             return (
               <TouchableOpacity
@@ -524,9 +487,7 @@ export default function KitchenScreen() {
                     : styles.filterTabInactive,
                 ]}
                 onPress={() =>
-                  setSelectedFilter(
-                    tab.value
-                  )
+                  setSelectedFilter(tab.value)
                 }
                 activeOpacity={0.8}
               >
@@ -543,8 +504,6 @@ export default function KitchenScreen() {
               </TouchableOpacity>
             );
           })}
-
-          {/* REFRESH */}
 
           <TouchableOpacity
             style={[
@@ -571,17 +530,10 @@ export default function KitchenScreen() {
         </ScrollView>
       </View>
 
-      {/* =====================================================
-          ORDERS
-      ====================================================== */}
-
+      {/* ORDERS */}
       <ScrollView
-        contentContainerStyle={
-          styles.scrollContainer
-        }
-        showsVerticalScrollIndicator={
-          false
-        }
+        contentContainerStyle={styles.scrollContainer}
+        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -591,42 +543,23 @@ export default function KitchenScreen() {
           />
         }
       >
-        {/* ===================================================
-            LOADING
-        ==================================================== */}
-
         {isLoading ? (
-          <View
-            style={styles.loadingContainer}
-          >
+          <View style={styles.loadingContainer}>
             <ActivityIndicator
               size="large"
               color="#FF7A00"
             />
-
-            <Text
-              style={styles.loadingText}
-            >
+            <Text style={styles.loadingText}>
               Loading kitchen orders...
             </Text>
           </View>
-        ) : filteredOrders.length ===
-          0 ? (
-          /* =================================================
-              EMPTY
-          ================================================== */
-
-          <View
-            style={styles.emptyContainer}
-          >
+        ) : filteredOrders.length === 0 ? (
+          <View style={styles.emptyContainer}>
             <ChefHat
               color="#CCC"
               size={54}
             />
-
-            <Text
-              style={styles.emptyText}
-            >
+            <Text style={styles.emptyText}>
               No orders found in this queue
             </Text>
 
@@ -647,396 +580,157 @@ export default function KitchenScreen() {
                   size={16}
                 />
               )}
-
-              <Text
-                style={
-                  styles.emptyRefreshText
-                }
-              >
+              <Text style={styles.emptyRefreshText}>
                 Refresh Orders
               </Text>
             </TouchableOpacity>
           </View>
         ) : (
-          /* =================================================
-              ORDER LIST
-          ================================================== */
-
           filteredOrders.map((order) => {
-            // =================================================
-            // STATUS COLORS
-            // =================================================
-
             let statusBg = "#E5E7EB";
             let statusColor = "#374151";
 
-            if (
-              order.orderStatus ===
-              "pending"
-            ) {
+            if (order.orderStatus === "pending") {
               statusBg = "#FFE8D6";
               statusColor = "#FF7A00";
-            } else if (
-              order.orderStatus ===
-              "preparing"
-            ) {
+            } else if (order.orderStatus === "preparing") {
               statusBg = "#D6E4FD";
               statusColor = "#2563EB";
-            } else if (
-              order.orderStatus ===
-              "completed"
-            ) {
+            } else if (order.orderStatus === "completed") {
               statusBg = "#E0F2FE";
               statusColor = "#0369A1";
-            } else if (
-              order.orderStatus ===
-              "cancelled"
-            ) {
+            } else if (order.orderStatus === "cancelled") {
               statusBg = "#FEE2E2";
               statusColor = "#DC2626";
             }
 
-            const nextActionLabel =
-              getNextActionLabel(
-                order.orderStatus
-              );
-
-            const staffName =
-              order.staffName ||
-              "Unknown";
-
-            const isUpdating =
-              updatingOrderId ===
-              order._id;
+            const nextActionLabel = getNextActionLabel(order.orderStatus);
+            const staffName = order.staffName || "Unknown";
+            const isUpdating = updatingOrderId === order._id;
 
             return (
-              <View
-                key={order._id}
-                style={styles.orderCard}
-              >
-                {/* ===========================================
-                    ORDER HEADER
-                ============================================ */}
-
-                <View
-                  style={
-                    styles.cardHeaderRow
-                  }
-                >
-                  <View
-                    style={
-                      styles.orderIdGroup
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.orderIdText
-                      }
-                    >
+              <View key={order._id} style={styles.orderCard}>
+                {/* ORDER HEADER */}
+                <View style={styles.cardHeaderRow}>
+                  <View style={styles.orderIdGroup}>
+                    <Text style={styles.orderIdText}>
                       Table: {order.tableNumber}
                     </Text>
-
-                    <View
-                      style={styles.divider}
-                    />
-
-                    {/* <Text
-                      style={
-                        styles.tableText
-                      }
-                    >
-                      {order.orderType ===
-                      "dine-in"
-                        ? order.tableNumber ||
-                          "No Table"
-                        : order.orderType ===
-                          "takeaway"
-                        ? "Takeaway"
-                        : "Delivery"}
-                    </Text> */}
+                    <View style={styles.divider} />
                   </View>
-
-                  {/* STATUS */}
 
                   <View
                     style={[
                       styles.statusBadge,
-                      {
-                        backgroundColor:
-                          statusBg,
-                      },
+                      { backgroundColor: statusBg },
                     ]}
                   >
                     <Text
                       style={[
                         styles.statusText,
-                        {
-                          color:
-                            statusColor,
-                        },
+                        { color: statusColor },
                       ]}
                     >
-                      {getStatusLabel(
-                        order.orderStatus
-                      )}
+                      {getStatusLabel(order.orderStatus)}
                     </Text>
                   </View>
                 </View>
 
-                {/* ===========================================
-                    ORDER META
-                ============================================ */}
-
-                <View
-                  style={styles.metaRow}
-                >
-                  <Text
-                    style={styles.waiterText}
-                  >
+                {/* ORDER META */}
+                <View style={styles.metaRow}>
+                  <Text style={styles.waiterText}>
                     Waiter:{" "}
-                    <Text
-                      style={{
-                        fontWeight:
-                          "bold",
-                        color: "#111827",
-                      }}
-                    >
+                    <Text style={{ fontWeight: "bold", color: "#111827" }}>
                       {staffName}
                     </Text>
                   </Text>
 
-                  <View
-                    style={
-                      styles.timeGroup
-                    }
-                  >
+                  <View style={styles.timeGroup}>
                     <Clock
                       color="#777"
                       size={13}
-                      style={{
-                        marginRight: 4,
-                      }}
+                      style={{ marginRight: 4 }}
                     />
-
-                    <Text
-                      style={
-                        styles.timeText
-                      }
-                    >
-                      {formatOrderTime(
-                        order.createdAt
-                      )}
+                    <Text style={styles.timeText}>
+                      {formatOrderTime(order.createdAt)}
                     </Text>
                   </View>
                 </View>
 
-                {/* ===========================================
-                    CUSTOMER
-                ============================================ */}
-
+                {/* CUSTOMER */}
                 {order.customer?.name &&
-                  order.customer.name !==
-                    "Walk-in Customer" && (
-                    <View
-                      style={
-                        styles.customerRow
-                      }
-                    >
-                      <Text
-                        style={
-                          styles.customerLabel
-                        }
-                      >
-                        Customer
-                      </Text>
-
-                      <Text
-                        style={
-                          styles.customerName
-                        }
-                      >
+                  order.customer.name !== "Walk-in Customer" && (
+                    <View style={styles.customerRow}>
+                      <Text style={styles.customerLabel}>Customer</Text>
+                      <Text style={styles.customerName}>
                         {order.customer.name}
                       </Text>
                     </View>
                   )}
 
-                {/* ===========================================
-                    ITEMS
-                ============================================ */}
-
-                <View
-                  style={
-                    styles.itemsListContainer
-                  }
-                >
-                  <Text
-                    style={
-                      styles.itemSectionTitle
-                    }
-                  >
+                {/* ITEMS */}
+                <View style={styles.itemsListContainer}>
+                  <Text style={styles.itemSectionTitle}>
                     Items Ordered:
                   </Text>
 
-                  {order.items.map(
-                    (item, index) => (
-                      <View
-                        key={`${order._id}-${index}`}
-                        style={
-                          styles.itemRow
-                        }
-                      >
-                        {/* QUANTITY */}
+                  {order.items.map((item, index) => (
+                    <View
+                      key={`${order._id}-${index}`}
+                      style={styles.itemRow}
+                    >
+                      <Text style={styles.itemQuantityBullet}>
+                        {item.quantity}x
+                      </Text>
 
-                        <Text
-                          style={
-                            styles.itemQuantityBullet
-                          }
-                        >
-                          {item.quantity}x
+                      <View style={styles.itemNameContainer}>
+                        <Text style={styles.itemNameText}>
+                          {item.name}
                         </Text>
 
-                        <View
-                          style={
-                            styles.itemNameContainer
-                          }
-                        >
-                          {/* FOOD NAME */}
-
-                          <Text
-                            style={
-                              styles.itemNameText
-                            }
-                          >
-                            {item.name}
-                          </Text>
-
-                          {/* VARIANT */}
-
-                          {item.variant
-                            ?.name ? (
-                            <View
-                              style={
-                                styles.variantRow
-                              }
-                            >
-                              <Text
-                                style={
-                                  styles.variantLabel
-                                }
-                              >
-                                Variant:
-                              </Text>
-
-                              <Text
-                                style={
-                                  styles.variantName
-                                }
-                              >
-                                {
-                                  item
-                                    .variant
-                                    .name
-                                }
-                              </Text>
-                            </View>
-                          ) : null}
-
-                          {/* CUSTOMIZATION */}
-
-                          {item.customizations ? (
-                            <Text
-                              style={
-                                styles.customizationText
-                              }
-                            >
-                              {
-                                item.customizations
-                              }
+                        {item.variant?.name ? (
+                          <View style={styles.variantRow}>
+                            <Text style={styles.variantLabel}>Variant:</Text>
+                            <Text style={styles.variantName}>
+                              {item.variant.name}
                             </Text>
-                          ) : null}
-                        </View>
+                          </View>
+                        ) : null}
+
+                        {item.customizations ? (
+                          <Text style={styles.customizationText}>
+                            {item.customizations}
+                          </Text>
+                        ) : null}
                       </View>
-                    )
-                  )}
+                    </View>
+                  ))}
                 </View>
 
-                {/* ===========================================
-                    NOTES
-                ============================================ */}
-
+                {/* NOTES */}
                 {order.notes?.trim() ? (
-                  <View
-                    style={styles.notesBox}
-                  >
-                    <AlertCircle
-                      color="#FF7A00"
-                      size={15}
-                    />
-
-                    <Text
-                      style={styles.notesText}
-                    >
-                      {order.notes}
-                    </Text>
+                  <View style={styles.notesBox}>
+                    <AlertCircle color="#FF7A00" size={15} />
+                    <Text style={styles.notesText}>{order.notes}</Text>
                   </View>
                 ) : null}
 
-                {/* ===========================================
-                    ACTION
-                ============================================ */}
-
-                {order.orderStatus ===
-                "cancelled" ? (
-                  <View
-                    style={
-                      styles.cancelledBanner
-                    }
-                  >
-                    <XCircle
-                      color="#DC2626"
-                      size={17}
-                      style={{
-                        marginRight: 6,
-                      }}
-                    />
-
-                    <Text
-                      style={
-                        styles.cancelledText
-                      }
-                    >
-                      Order Cancelled
-                    </Text>
+                {/* ACTION */}
+                {order.orderStatus === "cancelled" ? (
+                  <View style={styles.cancelledBanner}>
+                    <XCircle color="#DC2626" size={17} style={{ marginRight: 6 }} />
+                    <Text style={styles.cancelledText}>Order Cancelled</Text>
                   </View>
-                ) : order.orderStatus ===
-                  "completed" ? (
-                  <View
-                    style={
-                      styles.completedBanner
-                    }
-                  >
-                    <CheckCircle2
-                      color="#0369A1"
-                      size={16}
-                      style={{
-                        marginRight: 6,
-                      }}
-                    />
-
-                    <Text
-                      style={
-                        styles.completedText
-                      }
-                    >
-                      Order Completed
-                    </Text>
+                ) : order.orderStatus === "completed" ? (
+                  <View style={styles.completedBanner}>
+                    <CheckCircle2 color="#0369A1" size={16} style={{ marginRight: 6 }} />
+                    <Text style={styles.completedText}>Order Completed</Text>
                   </View>
                 ) : (
                   <TouchableOpacity
                     style={[
                       styles.actionButton,
-                      isUpdating &&
-                        styles.actionButtonDisabled,
+                      isUpdating && styles.actionButtonDisabled,
                     ]}
                     disabled={isUpdating}
                     onPress={() =>
@@ -1048,26 +742,16 @@ export default function KitchenScreen() {
                     activeOpacity={0.8}
                   >
                     {isUpdating ? (
-                      <ActivityIndicator
-                        color="#FFFFFF"
-                        size="small"
-                      />
+                      <ActivityIndicator color="#FFFFFF" size="small" />
                     ) : (
                       <>
-                        <Text
-                          style={
-                            styles.actionButtonText
-                          }
-                        >
+                        <Text style={styles.actionButtonText}>
                           {nextActionLabel}
                         </Text>
-
                         <ArrowRight
                           color="#FFF"
                           size={16}
-                          style={{
-                            marginLeft: 6,
-                          }}
+                          style={{ marginLeft: 6 }}
                         />
                       </>
                     )}
@@ -1093,11 +777,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#0B3C29",
   },
-
-  // ==========================================================
-  // HEADER
-  // ==========================================================
-
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -1106,37 +785,31 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: "#0B3C29",
   },
-
   headerLeft: {
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
   },
-
   headerTitle: {
     fontSize: 18,
     fontWeight: "bold",
     color: "#FFF",
   },
-
   headerSubtitle: {
     fontSize: 11,
     color: "#D1D5DB",
     marginTop: 2,
   },
-
   liveIndicator: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor:
-      "rgba(239, 68, 68, 0.2)",
+    backgroundColor: "rgba(239, 68, 68, 0.2)",
     paddingVertical: 4,
     paddingHorizontal: 10,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#EF4444",
   },
-
   liveDot: {
     width: 8,
     height: 8,
@@ -1144,75 +817,53 @@ const styles = StyleSheet.create({
     backgroundColor: "#EF4444",
     marginRight: 6,
   },
-
   liveText: {
     color: "#EF4444",
     fontSize: 11,
     fontWeight: "bold",
   },
-
-  // ==========================================================
-  // FILTER
-  // ==========================================================
-
   filterWrapper: {
     backgroundColor: "#072E20",
     paddingVertical: 8,
   },
-
   filterScroll: {
     paddingHorizontal: 12,
     alignItems: "center",
   },
-
   filterTab: {
     paddingVertical: 6,
     paddingHorizontal: 14,
     borderRadius: 16,
     marginHorizontal: 4,
   },
-
   filterTabActive: {
     backgroundColor: "#FF7A00",
   },
-
   filterTabInactive: {
-    backgroundColor:
-      "rgba(255,255,255,0.1)",
+    backgroundColor: "rgba(255,255,255,0.1)",
   },
-
   filterText: {
     fontSize: 13,
     fontWeight: "600",
   },
-
   filterTextActive: {
     color: "#FFF",
   },
-
   filterTextInactive: {
     color: "#D1D5DB",
   },
-
   refreshButton: {
     width: 32,
     height: 32,
     borderRadius: 10,
-    backgroundColor:
-      "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(255,255,255,0.12)",
     alignItems: "center",
     justifyContent: "center",
     marginLeft: 6,
   },
-
   refreshButtonDisabled: {
     opacity: 0.6,
   },
-
-  // ==========================================================
-  // SCROLL
-  // ==========================================================
-
   scrollContainer: {
     backgroundColor: "#F8F9FA",
     borderTopLeftRadius: 24,
@@ -1220,41 +871,28 @@ const styles = StyleSheet.create({
     padding: 16,
     minHeight: "100%",
   },
-
-  // ==========================================================
-  // LOADING
-  // ==========================================================
-
   loadingContainer: {
     alignItems: "center",
     justifyContent: "center",
     marginTop: 100,
   },
-
   loadingText: {
     marginTop: 12,
     fontSize: 14,
     color: "#777",
     fontWeight: "600",
   },
-
-  // ==========================================================
-  // EMPTY
-  // ==========================================================
-
   emptyContainer: {
     alignItems: "center",
     justifyContent: "center",
     marginTop: 80,
   },
-
   emptyText: {
     fontSize: 15,
     color: "#888",
     marginTop: 10,
     textAlign: "center",
   },
-
   emptyRefreshButton: {
     marginTop: 18,
     flexDirection: "row",
@@ -1266,18 +904,12 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     paddingHorizontal: 14,
   },
-
   emptyRefreshText: {
     color: "#0B3C29",
     fontSize: 13,
     fontWeight: "700",
     marginLeft: 6,
   },
-
-  // ==========================================================
-  // ORDER CARD
-  // ==========================================================
-
   orderCard: {
     backgroundColor: "#FFF",
     borderRadius: 18,
@@ -1285,273 +917,188 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: "#E5E7EB",
-
     shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 3,
-
     elevation: 2,
   },
-
-  // ==========================================================
-  // ORDER HEADER
-  // ==========================================================
-
   cardHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 8,
   },
-
   orderIdGroup: {
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
   },
-
   orderIdText: {
     fontSize: 18,
     fontWeight: "bold",
     color: "#111",
   },
-
   divider: {
     width: 1,
     height: 14,
     backgroundColor: "#D1D5DB",
     marginHorizontal: 10,
   },
-
-  tableText: {
-    fontSize: 15,
-    fontWeight: "bold",
-    color: "#0B3C29",
-  },
-
   statusBadge: {
     paddingVertical: 4,
     paddingHorizontal: 10,
     borderRadius: 12,
   },
-
   statusText: {
     fontSize: 12,
     fontWeight: "bold",
   },
-
-  // ==========================================================
-  // META
-  // ==========================================================
-
   metaRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 12,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
   },
-
   waiterText: {
     fontSize: 13,
     color: "#4B5563",
   },
-
   timeGroup: {
     flexDirection: "row",
     alignItems: "center",
   },
-
   timeText: {
     fontSize: 12,
     color: "#6B7280",
   },
-
-  // ==========================================================
-  // CUSTOMER
-  // ==========================================================
-
   customerRow: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 10,
+    backgroundColor: "#F9FAFB",
+    padding: 8,
+    borderRadius: 8,
   },
-
   customerLabel: {
-    fontSize: 11,
-    color: "#9CA3AF",
-    fontWeight: "600",
+    fontSize: 12,
+    color: "#6B7280",
     marginRight: 8,
   },
-
   customerName: {
     fontSize: 13,
-    color: "#374151",
-    fontWeight: "700",
-  },
-
-  // ==========================================================
-  // ITEMS
-  // ==========================================================
-
-  itemsListContainer: {
-    backgroundColor: "#F9FAFB",
-    borderRadius: 12,
-    padding: 10,
-    marginBottom: 12,
-  },
-
-  itemSectionTitle: {
-    fontSize: 12,
-    fontWeight: "bold",
-    color: "#6B7280",
-    marginBottom: 6,
-  },
-
-  itemRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    paddingVertical: 6,
-  },
-
-  itemQuantityBullet: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#FF7A00",
-    marginRight: 8,
-    width: 28,
-  },
-
-  itemNameContainer: {
-    flex: 1,
-  },
-
-  itemNameText: {
-    fontSize: 14,
     fontWeight: "600",
     color: "#1F2937",
   },
-
-  // ==========================================================
-  // VARIANT
-  // ==========================================================
-
+  itemsListContainer: {
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: "#F3F4F6",
+    paddingVertical: 10,
+    marginBottom: 10,
+  },
+  itemSectionTitle: {
+    fontSize: 12,
+    fontWeight: "bold",
+    color: "#4B5563",
+    marginBottom: 6,
+  },
+  itemRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 6,
+  },
+  itemQuantityBullet: {
+    fontSize: 13,
+    fontWeight: "bold",
+    color: "#FF7A00",
+    marginRight: 8,
+  },
+  itemNameContainer: {
+    flex: 1,
+  },
+  itemNameText: {
+    fontSize: 13,
+    color: "#1F2937",
+    fontWeight: "500",
+  },
   variantRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 3,
+    marginTop: 2,
   },
-
   variantLabel: {
     fontSize: 11,
-    color: "#9CA3AF",
+    color: "#6B7280",
     marginRight: 4,
   },
-
   variantName: {
-    fontSize: 12,
-    color: "#FF7A00",
-    fontWeight: "700",
+    fontSize: 11,
+    color: "#374151",
+    fontWeight: "500",
   },
-
-  // ==========================================================
-  // CUSTOMIZATION
-  // ==========================================================
-
   customizationText: {
     fontSize: 11,
-    color: "#6B7280",
-    marginTop: 3,
+    color: "#D97706",
+    marginTop: 2,
     fontStyle: "italic",
   },
-
-  // ==========================================================
-  // NOTES
-  // ==========================================================
-
   notesBox: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    backgroundColor: "#FFF7ED",
-    borderWidth: 1,
-    borderColor: "#FED7AA",
-    borderRadius: 10,
-    padding: 10,
-    marginBottom: 12,
-  },
-
-  notesText: {
-    flex: 1,
-    fontSize: 12,
-    color: "#9A3412",
-    marginLeft: 7,
-    lineHeight: 17,
-  },
-
-  // ==========================================================
-  // ACTION BUTTON
-  // ==========================================================
-
-  actionButton: {
-    backgroundColor: "#0B3C29",
-    flexDirection: "row",
-    justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 12,
-    borderRadius: 12,
+    backgroundColor: "#FFFBEB",
+    padding: 8,
+    borderRadius: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#FEF3C7",
   },
-
+  notesText: {
+    fontSize: 12,
+    color: "#92400E",
+    marginLeft: 6,
+    flex: 1,
+  },
+  actionButton: {
+    backgroundColor: "#FF7A00",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
   actionButtonDisabled: {
-    opacity: 0.65,
+    opacity: 0.6,
   },
-
   actionButtonText: {
     color: "#FFF",
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: "bold",
   },
-
-  // ==========================================================
-  // COMPLETED
-  // ==========================================================
-
-  completedBanner: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#E0F2FE",
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
-
-  completedText: {
-    color: "#0369A1",
-    fontWeight: "bold",
-    fontSize: 14,
-  },
-
-  // ==========================================================
-  // CANCELLED
-  // ==========================================================
-
   cancelledBanner: {
     flexDirection: "row",
-    justifyContent: "center",
     alignItems: "center",
+    justifyContent: "center",
     backgroundColor: "#FEE2E2",
-    paddingVertical: 10,
-    borderRadius: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
   },
-
   cancelledText: {
     color: "#DC2626",
+    fontSize: 13,
     fontWeight: "bold",
-    fontSize: 14,
+  },
+  completedBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#E0F2FE",
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  completedText: {
+    color: "#0369A1",
+    fontSize: 13,
+    fontWeight: "bold",
   },
 });

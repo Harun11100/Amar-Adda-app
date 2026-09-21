@@ -9,6 +9,7 @@ import {
   StatusBar,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from "react-native";
 import {
   DollarSign,
@@ -25,6 +26,9 @@ import {
 } from "lucide-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Constants from "expo-constants";
+
+// Import your global auth store
+import { useAuthStore } from "../../../store/authStore"; // Adjust path as needed
 
 const API_URL = Constants.expoConfig?.extra?.API_URL;
 
@@ -139,6 +143,9 @@ export default function CashierScreen() {
   const [successMessage, setSuccessMessage] = useState(false);
   const [error, setError] = useState("");
 
+  // Retrieve user role dynamically from authStore
+  const userRole = useAuthStore((state: any) => state.userRole || state.user?.role);
+
   // =======================================================
   // FETCH ORDERS
   // =======================================================
@@ -220,10 +227,21 @@ export default function CashierScreen() {
   };
 
   // =======================================================
-  // OPEN PAYMENT MODAL
+  // OPEN PAYMENT MODAL (WITH ADMIN CHECK)
   // =======================================================
 
   const openPaymentModal = (order: CashierOrder) => {
+    const normalizedRole = typeof userRole === "string" ? userRole.toLowerCase() : "";
+    
+    // Restrict access: Only allow if role is explicitly "admin"
+    if (normalizedRole !== "admin") {
+      Alert.alert(
+        "Access Denied",
+        "Only administrators are authorized to proceed to checkout."
+      );
+      return;
+    }
+
     setSelectedOrder(order);
     setPaymentMethod("cash");
     setIsPaymentModalVisible(true);
@@ -445,7 +463,6 @@ export default function CashierScreen() {
               {/* TOP */}
               <View style={styles.billTopRow}>
                 <View style={styles.orderIdGroup}>
-                  {/* <Text style={styles.orderIdText}>#{order.orderNumber}</Text> */}
                   <View style={styles.divider} />
                   <Text style={styles.tableText}>
                     {getOrderLocation(order)}
@@ -812,7 +829,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    // backgroundColor: "#F9FAFB",
   },
   loadingText: {
     marginTop: 12,
@@ -903,7 +919,6 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     padding: 16,
-    // backgroundColor: "#F3F4F6",
   },
   sectionHeader: {
     flexDirection: "row",
@@ -993,11 +1008,6 @@ const styles = StyleSheet.create({
   orderIdGroup: {
     flexDirection: "row",
     alignItems: "center",
-  },
-  orderIdText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#111827",
   },
   divider: {
     width: 1,
@@ -1159,7 +1169,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#111827",
+    color: "#1F2937",
   },
   modalOrderNumber: {
     fontSize: 12,
@@ -1188,18 +1198,17 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   receiptBox: {
-    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
     borderRadius: 8,
     padding: 12,
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
   },
   receiptSectionTitle: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#111827",
-    marginBottom: 8,
+    color: "#1F2937",
+    marginBottom: 10,
   },
   receiptItemContainer: {
     marginBottom: 8,
@@ -1221,17 +1230,15 @@ const styles = StyleSheet.create({
   receiptVariant: {
     fontSize: 11,
     color: "#6B7280",
-    marginLeft: 10,
   },
   receiptCustomization: {
     fontSize: 11,
     color: "#D97706",
-    marginLeft: 10,
   },
   receiptDivider: {
     height: 1,
     backgroundColor: "#E5E7EB",
-    marginVertical: 8,
+    marginVertical: 10,
   },
   receiptSubRow: {
     flexDirection: "row",
@@ -1240,44 +1247,44 @@ const styles = StyleSheet.create({
   },
   receiptLabel: {
     fontSize: 13,
-    color: "#4B5563",
+    color: "#6B7280",
   },
   receiptValue: {
     fontSize: 13,
-    color: "#4B5563",
-    fontWeight: "500",
+    color: "#374151",
   },
   finalRow: {
-    marginTop: 4,
+    marginTop: 6,
     borderTopWidth: 1,
     borderTopColor: "#E5E7EB",
     paddingTop: 8,
+    marginBottom: 0,
   },
   finalLabel: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "700",
-    color: "#111827",
+    color: "#1F2937",
   },
   finalVal: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "700",
     color: "#059669",
   },
   paymentMethodTitle: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#111827",
+    color: "#1F2937",
     marginBottom: 10,
   },
   paymentMethodsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 20,
+    marginBottom: 16,
   },
   methodCard: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "#D1D5DB",
+    borderColor: "#E5E7EB",
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: "center",
@@ -1286,11 +1293,11 @@ const styles = StyleSheet.create({
   },
   methodCardActive: {
     borderColor: "#FF7A00",
-    backgroundColor: "#FFFBEB",
+    backgroundColor: "#FFF7ED",
   },
   methodText: {
-    fontSize: 11,
-    color: "#4B5563",
+    fontSize: 12,
+    color: "#6B7280",
     marginTop: 6,
     fontWeight: "500",
   },
@@ -1305,19 +1312,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 12,
     borderRadius: 8,
+    marginBottom: 8,
   },
   disabledButton: {
-    opacity: 0.7,
+    opacity: 0.6,
   },
   completePaymentText: {
     color: "#FFF",
-    fontSize: 15,
     fontWeight: "700",
+    fontSize: 15,
   },
   paymentConfirmationText: {
-    textAlign: "center",
     fontSize: 11,
     color: "#6B7280",
-    marginTop: 8,
+    textAlign: "center",
   },
 });

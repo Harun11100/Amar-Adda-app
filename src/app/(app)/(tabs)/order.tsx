@@ -23,7 +23,7 @@ import {
 } from "lucide-react-native";
 import Constants from "expo-constants";
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useAuthStore } from "../../../store/authStore"; // Update path if needed
 
 const API_URL = Constants.expoConfig?.extra?.API_URL;
 
@@ -87,63 +87,40 @@ type Table = {
 };
 
 export default function WaiterOrderFlowScreen() {
+  // Pull user data and session restore from global store
+  const user = useAuthStore((state) => state.user);
+  const isHydrated = useAuthStore((state) => state.isHydrated);
+  const checkSavedSession = useAuthStore((state) => state.checkSavedSession);
+
+  const userName = user?.name || "";
+
   const [foods, setFoods] = useState<Food[]>([]);
-  const [userName, setUserName] = useState<string>("");
-  
-  const [selectedCategory, setSelectedCategory] =
-    useState<string>("All");
-
+  const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [searchQuery, setSearchQuery] = useState("");
-
   const [cart, setCart] = useState<CartItem[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [submittingOrder, setSubmittingOrder] = useState(false);
-
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Table
   const [tables, setTables] = useState<Table[]>([]);
-  const [selectedTable, setSelectedTable] =
-    useState<number | string | null>(null);
-
-  const [isTableModalVisible, setIsTableModalVisible] =
-    useState(false);
+  const [selectedTable, setSelectedTable] = useState<number | string | null>(null);
+  const [isTableModalVisible, setIsTableModalVisible] = useState(false);
 
   // Variant
   const [variantFood, setVariantFood] = useState<Food | null>(null);
+  const [isVariantModalVisible, setIsVariantModalVisible] = useState(false);
 
-  const [isVariantModalVisible, setIsVariantModalVisible] =
-    useState(false);
-
-    console.log(userName, "userName")
-
-  // ---------------------------------------------------------
-  // FETCH USERNAME FROM ASYNC STORAGE
-  // ---------------------------------------------------------
-useEffect(() => {
-    const fetchUserName = async () => {
-      try {
-        const storedUser = await AsyncStorage.getItem("loggedInUser");
-        if (storedUser) {
-          const parsedUser = JSON.parse(storedUser);
-          if (parsedUser && parsedUser.name) {
-            setUserName(parsedUser.name);
-          }
-        }
-      } catch (error) {
-        console.log("Failed to load user from storage", error);
-      }
-    };
-
-    fetchUserName();
+  // Restore session on mount
+  useEffect(() => {
+    checkSavedSession();
   }, []);
 
   // ---------------------------------------------------------
   // FALLBACK TABLES
   // ---------------------------------------------------------
-
   const createFallbackTables = (): Table[] => {
     return Array.from({ length: 20 }, (_, index) => ({
       id: String(index + 1),
@@ -155,7 +132,6 @@ useEffect(() => {
   // ---------------------------------------------------------
   // FETCH DATA & RESET SELECTIONS ON REFRESH
   // ---------------------------------------------------------
-
   const fetchData = useCallback(async (isRefresh = false) => {
     if (!API_URL) {
       setErrorMessage(
@@ -169,7 +145,6 @@ useEffect(() => {
     try {
       if (isRefresh) {
         setRefreshing(true);
-        // Reset selections/states to default on refresh
         setCart([]);
         setSelectedTable(null);
         setSearchQuery("");
@@ -182,18 +157,13 @@ useEffect(() => {
 
       const [foodRes, tableRes] = await Promise.all([
         fetch(`${API_URL}/api/admin/food/getFood`),
-
-        fetch(`${API_URL}/api/admin/table/getTables`).catch(
-          () => null
-        ),
+        fetch(`${API_URL}/api/admin/table/getTables`).catch(() => null),
       ]);
 
       const foodData = await foodRes.json();
 
       if (!foodRes.ok || !foodData?.success) {
-        throw new Error(
-          foodData?.message || "Failed to load menu."
-        );
+        throw new Error(foodData?.message || "Failed to load menu.");
       }
 
       const foodList: Food[] = Array.isArray(foodData.foods)
@@ -201,13 +171,12 @@ useEffect(() => {
         : [];
 
       setFoods(foodList);
-   
+
       let loadedTables: Table[] = [];
 
       if (tableRes?.ok) {
         try {
           const tableData = await tableRes.json();
-
           if (
             tableData?.success &&
             Array.isArray(tableData.tables) &&
@@ -216,7 +185,7 @@ useEffect(() => {
             loadedTables = tableData.tables;
           }
         } catch {
-          // Use fallback below.
+          // Fallback handled below
         }
       }
 
@@ -226,11 +195,8 @@ useEffect(() => {
 
       setTables(loadedTables);
     } catch (error: any) {
-      const message =
-        error?.message || "Unable to load restaurant data.";
-
+      const message = error?.message || "Unable to load restaurant data.";
       setErrorMessage(message);
-
       Alert.alert("Error", message);
     } finally {
       setLoading(false);
@@ -245,7 +211,6 @@ useEffect(() => {
   // ---------------------------------------------------------
   // PRICE HELPERS
   // ---------------------------------------------------------
-
   const getVariantPrice = (variant: Variant) => {
     return variant.discountPrice ?? variant.price;
   };
@@ -263,12 +228,9 @@ useEffect(() => {
   };
 
   // ---------------------------------------------------------
-  // CART KEY (FIXED)
+  // CART KEY
   // ---------------------------------------------------------
-
-  const getCartKey = (
-    item: Pick<CartItem, "_id" | "selectedVariant">
-  ) => {
+  const getCartKey = (item: Pick<CartItem, "_id" | "selectedVariant">) => {
     if (item.selectedVariant) {
       const variantIdentifier = item.selectedVariant._id || item.selectedVariant.name;
       return `${item._id}-variant-${variantIdentifier}`;
@@ -279,12 +241,7 @@ useEffect(() => {
   // ---------------------------------------------------------
   // CART UPDATE
   // ---------------------------------------------------------
-
-  const updateCart = (
-    food: Food,
-    variant?: Variant,
-    delta = 1
-  ) => {
+  const updateCart = (food: Food, variant?: Variant, delta = 1) => {
     const key = getCartKey({
       _id: food._id,
       selectedVariant: variant,
@@ -301,9 +258,7 @@ useEffect(() => {
         const newQuantity = existingItem.quantity + delta;
 
         if (newQuantity <= 0) {
-          return updatedCart.filter(
-            (_, index) => index !== existingIndex
-          );
+          return updatedCart.filter((_, index) => index !== existingIndex);
         }
 
         updatedCart[existingIndex] = {
@@ -329,27 +284,19 @@ useEffect(() => {
     });
   };
 
-  const getQuantity = (
-    foodId: string,
-    variant?: Variant
-  ) => {
+  const getQuantity = (foodId: string, variant?: Variant) => {
     const key = getCartKey({
       _id: foodId,
       selectedVariant: variant,
     });
 
-    const item = cart.find(
-      (cartItem) => getCartKey(cartItem) === key
-    );
-
+    const item = cart.find((cartItem) => getCartKey(cartItem) === key);
     return item?.quantity || 0;
   };
 
   const getAvailableVariants = (food: Food) => {
     return (
-      food.variants?.filter(
-        (variant) => variant.isAvailable !== false
-      ) || []
+      food.variants?.filter((variant) => variant.isAvailable !== false) || []
     );
   };
 
@@ -362,36 +309,25 @@ useEffect(() => {
       }
 
       const categoryMatch =
-        selectedCategory === "All" ||
-        food.category === selectedCategory;
+        selectedCategory === "All" || food.category === selectedCategory;
 
       const searchMatch =
         !query ||
         food.name.toLowerCase().includes(query) ||
-        food.description
-          ?.toLowerCase()
-          .includes(query);
+        food.description?.toLowerCase().includes(query);
 
       return categoryMatch && Boolean(searchMatch);
     });
-  }, [
-    foods,
-    selectedCategory,
-    searchQuery,
-  ]);
+  }, [foods, selectedCategory, searchQuery]);
 
   const { itemCount, subtotal } = useMemo(() => {
     return cart.reduce(
       (total, item) => {
         total.itemCount += item.quantity;
-        total.subtotal +=
-          getFoodPrice(item) * item.quantity;
+        total.subtotal += getFoodPrice(item) * item.quantity;
         return total;
       },
-      {
-        itemCount: 0,
-        subtotal: 0,
-      }
+      { itemCount: 0, subtotal: 0 }
     );
   }, [cart]);
 
@@ -417,9 +353,7 @@ useEffect(() => {
       return table.name;
     }
 
-    const number =
-      table.tableNumber ?? table.number;
-
+    const number = table.tableNumber ?? table.number;
     if (number !== undefined && number !== null) {
       return `Table ${number}`;
     }
@@ -428,37 +362,22 @@ useEffect(() => {
   };
 
   const getTableValue = (table: Table) => {
-    return (
-      table.tableNumber ??
-      table.number ??
-      table.name ??
-      table.id ??
-      null
-    );
+    return table.tableNumber ?? table.number ?? table.name ?? table.id ?? null;
   };
 
   const handlePlaceOrder = async () => {
     if (selectedTable === null) {
-      Alert.alert(
-        "Select Table",
-        "Please select a table before placing the order."
-      );
+      Alert.alert("Select Table", "Please select a table before placing the order.");
       return;
     }
 
     if (cart.length === 0) {
-      Alert.alert(
-        "Empty Order",
-        "Please add at least one food item."
-      );
+      Alert.alert("Empty Order", "Please add at least one food item.");
       return;
     }
 
     if (!API_URL) {
-      Alert.alert(
-        "Configuration Error",
-        "API_URL is not configured."
-      );
+      Alert.alert("Configuration Error", "API_URL is not configured.");
       return;
     }
 
@@ -483,28 +402,19 @@ useEffect(() => {
         subtotal,
         totalNumber: itemCount,
         total: subtotal,
-        staffName: userName
+        staffName: userName,
       };
 
-      console.log("Placing order with payload:", payload);
-
-      const response = await fetch(
-        `${API_URL}/api/admin/order/createOrder`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        }
-      );
+      const response = await fetch(`${API_URL}/api/admin/order/createOrder`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
 
       const data = await response.json();
 
       if (!response.ok || !data?.success) {
-        throw new Error(
-          data?.message || "Failed to create order."
-        );
+        throw new Error(data?.message || "Failed to create order.");
       }
 
       Alert.alert(
@@ -525,21 +435,17 @@ useEffect(() => {
     } catch (error: any) {
       Alert.alert(
         "Order Failed",
-        error?.message ||
-          "Something went wrong while placing the order."
+        error?.message || "Something went wrong while placing the order."
       );
     } finally {
       setSubmittingOrder(false);
     }
   };
 
-  if (loading) {
+  if (loading || !isHydrated) {
     return (
       <SafeAreaView style={styles.loadingScreen}>
-        <StatusBar
-          barStyle="light-content"
-          backgroundColor={COLORS.green}
-        />
+        <StatusBar barStyle="light-content" backgroundColor={COLORS.green} />
         <View style={styles.loadingIcon}>
           <ShoppingCart size={30} color={COLORS.orange} />
         </View>
@@ -551,10 +457,7 @@ useEffect(() => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar
-        barStyle="light-content"
-        backgroundColor={COLORS.green}
-      />
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.green} />
 
       {/* HEADER */}
       <View style={styles.header}>
