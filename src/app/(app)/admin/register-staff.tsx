@@ -80,8 +80,6 @@ export default function RegisterStaffScreen() {
             role,
     }
 
-    console.log(payload)
-
     try {
       const response = await fetch(
         `${API_URL}/api/admin/User/addUser`,

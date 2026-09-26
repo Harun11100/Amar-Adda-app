@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   Image,
   Alert,
+  TextInput,
+  Keyboard,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
@@ -24,19 +26,27 @@ import {
   Sparkles,
   Leaf,
   Clock,
+  Search,
+  X,
+  TrendingUp,
+  DollarSign,
+  ShoppingBag,
+  Eye,
 } from "lucide-react-native";
 import Constants from "expo-constants";
+import { useRouter } from "expo-router";
 
 const API_URL = Constants.expoConfig?.extra?.API_URL;
 
 const COLORS = {
-  primary: "#0F2A1D",
-  primaryLight: "#163827",
-  orange: "#F97316",
-  adminRed: "#EF4444",
-  background: "#F4F7F5",
+  primary: "#0B3C29", 
+  primaryLight: "#1F2937",
+  emerald: "#059669",
+  orange: "#EA580C",
+  adminRed: "#DC2626",
+  background: "#F8FAFC",
   card: "#FFFFFF",
-  text: "#090D16",
+  text: "#0F172A",
   textSecondary: "#64748B",
   border: "#E2E8F0",
   success: "#10B981",
@@ -76,13 +86,40 @@ type Food = {
   variants?: FoodVariant[];
 };
 
+type StatsData = {
+  totalSoldToday: number;
+  totalOrderToday: number;
+};
+
 export default function AdminFoodScreen() {
+
+  const router = useRouter();
   const [foods, setFoods] = useState<Food[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  const [stats, setStats] = useState<StatsData>({
+    totalSoldToday: 0,
+    totalOrderToday: 0,
+  });
+  const [statsLoading, setStatsLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingVariantKey, setDeletingVariantKey] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [expandedVariants, setExpandedVariants] = useState<Record<string, boolean>>({});
+
+  // Debounce search input to avoid too many fetches while typing
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const getFoodImage = (food: Food) => {
     if (typeof food.image === "string") return food.image;
@@ -101,7 +138,30 @@ export default function AdminFoodScreen() {
     );
   };
 
-  const fetchFoods = useCallback(async () => {
+  const fetchStatistics = async () => {
+    if (!API_URL) return;
+    try {
+      setStatsLoading(true);
+      const response = await fetch(`${API_URL}/api/admin/today-stats`, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setStats({
+          totalSoldToday: data.stats?.totalSoldToday || 0,
+          totalOrderToday: data.stats?.totalOrderToday || 0,
+       
+        });
+      }
+    } catch (err) {
+      console.error("Failed to load statistics:", err);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
+  const fetchFoods = useCallback(async (pageNumber = 1, isRefresh = false, search = "") => {
     if (!API_URL) {
       setError("API configuration is missing.");
       setLoading(false);
@@ -109,11 +169,20 @@ export default function AdminFoodScreen() {
     }
 
     try {
-      setError("");
-      const response = await fetch(`${API_URL}/api/admin/food/getFood`, {
-        method: "GET",
-        headers: { Accept: "application/json" },
-      });
+      if (pageNumber === 1 && !isRefresh) {
+        setLoading(true);
+      }
+      setError(""); 
+
+      const response = await fetch(
+        `${API_URL}/api/admin/getFood?page=${pageNumber}&limit=10&search=${encodeURIComponent(
+          search
+        )}`,
+        {
+          method: "GET",
+          headers: { Accept: "application/json" },
+        }
+      );
 
       const data = await response.json();
 
@@ -129,24 +198,58 @@ export default function AdminFoodScreen() {
         ? data.data
         : [];
 
-      setFoods(foodData);
+      if (foodData.length < 10) {
+        setHasMore(false);
+      } else {
+        setHasMore(true);
+      }
+
+      if (pageNumber === 1) {
+        setFoods(foodData);
+      } else {
+        setFoods((prev) => {
+          const existingIds = new Set(prev.map((f) => f._id));
+          const uniqueNewFoods = foodData.filter((f) => !existingIds.has(f._id));
+          return [...prev, ...uniqueNewFoods];
+        });
+      }
+
+      setPage(pageNumber);
     } catch (error: any) {
       console.error("Fetch food error:", error);
       setError(error?.message || "Unable to load food items.");
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setLoadingMore(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchFoods();
-  }, [fetchFoods]);
+    setPage(1);
+    setHasMore(true);
+    fetchFoods(1, false, debouncedSearch);
+    fetchStatistics();
+  }, [debouncedSearch, fetchFoods]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await fetchFoods();
+    setPage(1);
+    setHasMore(true);
+    await Promise.all([fetchFoods(1, true, debouncedSearch), fetchStatistics()]);
   };
+
+  const handleLoadMore = () => {
+    if (loadingMore || !hasMore || loading) return;
+    setLoadingMore(true);
+    const nextPage = page + 1;
+    fetchFoods(nextPage, false, debouncedSearch);
+  };
+
+  const handleViewTodaysSoldItems = () => {
+    // Implement navigation or modal popup to view today's sold items list
+    router.push("/admin/sold-item-list");
+  }
 
   const toggleVariants = (foodId: string) => {
     setExpandedVariants((previous) => ({
@@ -184,6 +287,7 @@ export default function AdminFoodScreen() {
       }
 
       setFoods((prev) => prev.filter((food) => food._id !== foodId));
+      fetchStatistics();
       Alert.alert("Deleted", "Food item deleted successfully.");
     } catch (error: any) {
       Alert.alert("Delete Failed", error?.message || "Unable to delete this food item.");
@@ -192,15 +296,85 @@ export default function AdminFoodScreen() {
     }
   };
 
-  const renderVariant = (variant: FoodVariant, index: number) => {
+  const handleDeleteVariant = (foodId: string, variant: FoodVariant, variantIndex: number) => {
+    const variantIdentifier = variant._id || `${variant.name}-${variantIndex}`;
+    Alert.alert(
+      "Delete Variant",
+      `Are you sure you want to remove variant "${variant.name}"?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => confirmDeleteVariant(foodId, variantIdentifier, variantIndex),
+        },
+      ]
+    );
+  };
+
+  const confirmDeleteVariant = async (foodId: string, variantIdentifier: string, variantIndex: number) => {
+    if (!API_URL) return;
+
+    const targetFood = foods.find((f) => f._id === foodId);
+    const targetVariant = targetFood?.variants?.[variantIndex];
+    const variantId = targetVariant?._id;
+
+    try {
+      setDeletingVariantKey(variantIdentifier);
+
+      const response = await fetch(`${API_URL}/api/admin/delete-variant`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          foodId,
+          variantId,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data?.message || 'Failed to delete variant.');
+      }
+
+      setFoods((prevFoods) =>
+        prevFoods.map((food) => {
+          if (food._id === foodId) {
+            if (data.variants) {
+              return { ...food, variants: data.variants };
+            }
+            if (food.variants) {
+              const updatedVariants = food.variants.filter((_, idx) => idx !== variantIndex);
+              return { ...food, variants: updatedVariants };
+            }
+          }
+          return food;
+        })
+      );
+
+      Alert.alert("Success", data?.message || "Variant removed successfully.");
+    } catch (error: any) {
+      console.error("Delete variant error:", error);
+      Alert.alert("Error", error?.message || "Failed to delete variant.");
+    } finally {
+      setDeletingVariantKey(null);
+    }
+  };
+
+  const renderVariant = (variant: FoodVariant, index: number, foodId: string) => {
     const variantHasDiscount = hasDiscount(variant.price, variant.discountPrice);
     const finalPrice =
       variant.discountPrice !== null && variant.discountPrice !== undefined
         ? Number(variant.discountPrice)
         : Number(variant.price);
+    const variantKey = variant._id || `${variant.name}-${index}`;
+    const isDeletingThisVariant = deletingVariantKey === variantKey;
 
     return (
-      <View key={variant._id || `${variant.name}-${index}`} style={styles.variantCard}>
+      <View key={variantKey} style={styles.variantCard}>
         <View style={styles.variantLeft}>
           <View style={styles.variantNumber}>
             <Text style={styles.variantNumberText}>{index + 1}</Text>
@@ -218,25 +392,40 @@ export default function AdminFoodScreen() {
           </View>
         </View>
 
-        <View
-          style={[
-            styles.variantAvailability,
-            { backgroundColor: variant.isAvailable === false ? "#FEF2F2" : "#ECFDF5" },
-          ]}
-        >
-          {variant.isAvailable === false ? (
-            <CircleX size={10} color={COLORS.adminRed} />
-          ) : (
-            <CircleCheck size={10} color={COLORS.success} />
-          )}
-          <Text
+        <View style={styles.variantRightContainer}>
+          <View
             style={[
-              styles.variantAvailabilityText,
-              { color: variant.isAvailable === false ? COLORS.adminRed : COLORS.success },
+              styles.variantAvailability,
+              { backgroundColor: variant.isAvailable === false ? "#FEF2F2" : "#ECFDF5" },
             ]}
           >
-            {variant.isAvailable === false ? "Off" : "Active"}
-          </Text>
+            {variant.isAvailable === false ? (
+              <CircleX size={10} color={COLORS.adminRed} />
+            ) : (
+              <CircleCheck size={10} color={COLORS.success} />
+            )}
+            <Text
+              style={[
+                styles.variantAvailabilityText,
+                { color: variant.isAvailable === false ? COLORS.adminRed : COLORS.success },
+              ]}
+            >
+              {variant.isAvailable === false ? "Off" : "Active"}
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={styles.variantDeleteBtn}
+            onPress={() => handleDeleteVariant(foodId, variant, index)}
+            disabled={isDeletingThisVariant}
+            activeOpacity={0.7}
+          >
+            {isDeletingThisVariant ? (
+              <ActivityIndicator size="small" color={COLORS.adminRed} />
+            ) : (
+              <Trash2 size={13} color={COLORS.adminRed} />
+            )}
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -256,139 +445,136 @@ export default function AdminFoodScreen() {
 
     return (
       <View style={[styles.foodCard, isDeleting && styles.foodCardDeleting]}>
-        {/* IMAGE CONTAINER */}
-        <View style={styles.foodImageContainer}>
-          {imageUrl ? (
-            <Image source={{ uri: imageUrl }} style={styles.foodImage} resizeMode="cover" />
-          ) : (
-            <View style={styles.noImage}>
-              <UtensilsCrossed size={24} color={COLORS.textSecondary} />
-            </View>
-          )}
-
-          {/* CATEGORY OVERLAY */}
-          {/* <View style={styles.categoryBadge}>
-            <Text style={styles.categoryBadgeText} numberOfLines={1}>{food.categoryName}</Text>
-          </View> */}
-
-          {/* AVAILABILITY BADGE */}
-          <View
-            style={[
-              styles.availabilityBadge,
-              { backgroundColor: food.isAvailable ? "#ECFDF5" : "#FEF2F2" },
-            ]}
-          >
-            {food.isAvailable ? (
-              <CircleCheck size={11} color={COLORS.success} />
+        <View style={styles.foodCardInner}>
+          <View style={styles.foodImageContainer}>
+            {imageUrl ? (
+              <Image source={{ uri: imageUrl }} style={styles.foodImage} resizeMode="cover" />
             ) : (
-              <CircleX size={11} color={COLORS.adminRed} />
+              <View style={styles.noImage}>
+                <UtensilsCrossed size={28} color={COLORS.textSecondary} />
+              </View>
             )}
-            <Text
+
+            <View
               style={[
-                styles.availabilityText,
-                { color: food.isAvailable ? COLORS.success : COLORS.adminRed },
+                styles.availabilityBadge,
+                { backgroundColor: food.isAvailable ? "#ECFDF5" : "#FEF2F2" },
               ]}
             >
-              {food.isAvailable ? "Available" : "Hidden"}
-            </Text>
+              {food.isAvailable ? (
+                <CircleCheck size={12} color={COLORS.success} />
+              ) : (
+                <CircleX size={12} color={COLORS.adminRed} />
+              )}
+              <Text
+                style={[
+                  styles.availabilityText,
+                  { color: food.isAvailable ? COLORS.success : COLORS.adminRed },
+                ]}
+              >
+                {food.isAvailable ? "Available" : "Hidden"}
+              </Text>
+            </View>
           </View>
-        </View>
 
-        {/* CONTENT */}
-        <View style={styles.foodContent}>
-          <View style={styles.foodTitleRow}>
-            <Text style={styles.foodName} numberOfLines={1}>
-              {food.name}
-            </Text>
-          </View>
+          <View style={styles.foodContent}>
+            <View style={styles.foodHeaderRow}>
+              <Text style={styles.foodName} numberOfLines={1}>
+                {food.name}
+              </Text>
+              
+              <View style={styles.priceContainer}>
+                {foodHasDiscount ? (
+                  <View style={styles.priceRow}>
+                    <Text style={styles.discountPrice}>{formatCurrency(foodFinalPrice)}</Text>
+                    <Text style={styles.originalPrice}>{formatCurrency(food.price)}</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.normalPrice}>{formatCurrency(food.price)}</Text>
+                )}
+              </View>
+            </View>
 
-          {food.description ? (
-            <Text style={styles.description} numberOfLines={2}>
-              {food.description}
-            </Text>
-          ) : null}
+            {food.description ? (
+              <Text style={styles.description} numberOfLines={2}>
+                {food.description}
+              </Text>
+            ) : null}
 
-          {/* META TAGS (TIME / VEG / FEATURED) */}
-          <View style={styles.metaRow}>
-            {food.preparationTime ? (
-              <View style={styles.metaBadge}>
-                <Clock size={10} color={COLORS.textSecondary} />
-                <Text style={styles.metaText}>{food.preparationTime}m</Text>
+            <View style={styles.metaRow}>
+              {food.preparationTime ? (
+                <View style={styles.metaBadge}>
+                  <Clock size={11} color={COLORS.textSecondary} />
+                  <Text style={styles.metaText}>{food.preparationTime} mins</Text>
+                </View>
+              ) : null}
+
+              {food.isVegetarian ? (
+                <View style={[styles.metaBadge, { backgroundColor: "#ECFDF5" }]}>
+                  <Leaf size={11} color={COLORS.success} />
+                  <Text style={[styles.metaText, { color: COLORS.success }]}>Vegetarian</Text>
+                </View>
+              ) : null}
+
+              {food.isFeatured ? (
+                <View style={[styles.metaBadge, { backgroundColor: "#FFF7ED" }]}>
+                  <Sparkles size={11} color={COLORS.orange} />
+                  <Text style={[styles.metaText, { color: COLORS.orange }]}>Featured</Text>
+                </View>
+              ) : null}
+            </View>
+
+            {hasVariants ? (
+              <View style={styles.variantsSection}>
+                <TouchableOpacity
+                  style={styles.variantHeader}
+                  onPress={() => toggleVariants(food._id)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.variantHeaderLeft}>
+                    <Text style={styles.variantHeaderTitle}>Food Variants</Text>
+                    <View style={styles.variantHeaderCount}>
+                      <Text style={styles.variantHeaderCountText}>{variants.length}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.variantHeaderRight}>
+                    <Text style={styles.variantToggleText}>
+                      {variantsExpanded ? "Hide Options" : "View Options"}
+                    </Text>
+                    {variantsExpanded ? (
+                      <ChevronUp size={14} color={COLORS.text} />
+                    ) : (
+                      <ChevronDown size={14} color={COLORS.text} />
+                    )}
+                  </View>
+                </TouchableOpacity>
+
+                {variantsExpanded && (
+                  <View style={styles.variantList}>
+                    {variants.map((v, i) => renderVariant(v, i, food._id))}
+                  </View>
+                )}
               </View>
             ) : null}
 
-            {food.isVegetarian ? (
-              <View style={[styles.metaBadge, { backgroundColor: "#ECFDF5" }]}>
-                <Leaf size={10} color={COLORS.success} />
-                <Text style={[styles.metaText, { color: COLORS.success }]}>Veg</Text>
-              </View>
-            ) : null}
-
-            {food.isFeatured ? (
-              <View style={[styles.metaBadge, { backgroundColor: "#FFF7ED" }]}>
-                <Sparkles size={10} color={COLORS.orange} />
-                <Text style={[styles.metaText, { color: COLORS.orange }]}>Featured</Text>
-              </View>
-            ) : null}
-          </View>
-
-          {/* PRICE ROW */}
-          <View style={styles.priceRow}>
-            {foodHasDiscount ? (
-              <>
-                <Text style={styles.discountPrice}>{formatCurrency(foodFinalPrice)}</Text>
-                <Text style={styles.originalPrice}>{formatCurrency(food.price)}</Text>
-              </>
-            ) : (
-              <Text style={styles.normalPrice}>{formatCurrency(food.price)}</Text>
-            )}
-          </View>
-
-          {/* VARIANTS SECTION */}
-          {hasVariants ? (
-            <View style={styles.variantsSection}>
+            <View style={styles.cardFooter}>
               <TouchableOpacity
-                style={styles.variantHeader}
-                onPress={() => toggleVariants(food._id)}
+                style={styles.deleteButton}
+                onPress={() => handleDelete(food)}
+                disabled={isDeleting}
                 activeOpacity={0.7}
               >
-                <View style={styles.variantHeaderLeft}>
-                  <Text style={styles.variantHeaderTitle}>Variants</Text>
-                  <View style={styles.variantHeaderCount}>
-                    <Text style={styles.variantHeaderCountText}>{variants.length}</Text>
-                  </View>
-                </View>
-                {variantsExpanded ? (
-                  <ChevronUp size={14} color={COLORS.primary} />
+                {isDeleting ? (
+                  <ActivityIndicator size="small" color={COLORS.adminRed} />
                 ) : (
-                  <ChevronDown size={14} color={COLORS.primary} />
+                  <>
+                    <Trash2 size={14} color={COLORS.adminRed} />
+                    <Text style={styles.deleteButtonText}>Delete Dish</Text>
+                  </>
                 )}
               </TouchableOpacity>
-
-              {variantsExpanded && (
-                <View style={styles.variantList}>
-                  {variants.map((v, i) => renderVariant(v, i))}
-                </View>
-              )}
             </View>
-          ) : null}
-
-          {/* DELETE BUTTON */}
-          <TouchableOpacity
-            style={styles.deleteButton}
-            onPress={() => handleDelete(food)}
-            disabled={isDeleting}
-            activeOpacity={0.7}
-          >
-            {isDeleting ? (
-              <ActivityIndicator size="small" color={COLORS.adminRed} />
-            ) : (
-              <>
-                <Trash2 size={13} color={COLORS.adminRed} />
-                <Text style={styles.deleteButtonText}>Remove Item</Text>
-              </>
-            )}
-          </TouchableOpacity>
+          </View>
         </View>
       </View>
     );
@@ -398,11 +584,10 @@ export default function AdminFoodScreen() {
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
 
-      {/* HEADER */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <View style={styles.adminBadgeIcon}>
-            <ShieldCheck size={20} color="#34D399" />
+            <ShieldCheck size={22} color="#34D399" />
           </View>
           <View>
             <Text style={styles.headerTitle}>Food Management</Text>
@@ -410,8 +595,15 @@ export default function AdminFoodScreen() {
           </View>
         </View>
 
-        <TouchableOpacity style={styles.headerRefreshButton} onPress={fetchFoods} activeOpacity={0.7}>
-          <RefreshCw size={17} color="#FFFFFF" />
+        <TouchableOpacity
+          style={styles.headerRefreshButton}
+          onPress={() => {
+            fetchFoods(1, true, debouncedSearch);
+            fetchStatistics();
+          }}
+          activeOpacity={0.7}
+        >
+          <RefreshCw size={18} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
 
@@ -420,58 +612,143 @@ export default function AdminFoodScreen() {
           data={foods}
           renderItem={renderFoodCard}
           keyExtractor={(item) => item._id}
-          numColumns={2}
-          columnWrapperStyle={styles.columnWrapper}
           showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.listContentContainer}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.5}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={handleRefresh}
-              tintColor={COLORS.primary}
-              colors={[COLORS.primary]}
+              tintColor={COLORS.text}
+              colors={[COLORS.text]}
             />
           }
           ListHeaderComponent={
             <View style={styles.listHeader}>
-              <View>
-                <Text style={styles.sectionTitle}>Menu Items</Text>
-                <Text style={styles.sectionSubtitle}>
-                  {foods.length} active dish{foods.length !== 1 ? "es" : ""} found
-                </Text>
+              {/* Statistic Cards Container */}
+              <View style={styles.statsContainer}>
+                <View style={styles.statsCard}>
+                  <View style={[styles.statsIconBox, { backgroundColor: "#ECFDF5" }]}>
+                    <ShoppingBag size={18} color={COLORS.success} />
+                  </View>
+                  <View style={styles.statsInfo}>
+                    <Text style={styles.statsLabel}>Sold Today</Text>
+                    {statsLoading ? (
+                      <ActivityIndicator size="small" color={COLORS.primary} />
+                    ) : (
+                      <Text style={styles.statsValue}>{stats.totalSoldToday}</Text>
+                    )}
+                  </View>
+                </View>
+
+                <View style={styles.statsCard}>
+                  <View style={[styles.statsIconBox, { backgroundColor: "#FFF7ED" }]}>
+                    <DollarSign size={18} color={COLORS.orange} />
+                  </View>
+                  <View style={styles.statsInfo}>
+                    <Text style={styles.statsLabel}>Total Orders Today</Text>
+                    {statsLoading ? (
+                      <ActivityIndicator size="small" color={COLORS.primary} />
+                    ) : (
+                      <Text style={styles.statsValue}>{stats.totalOrderToday}</Text>
+                    )}
+                  </View>
+                </View>
+              </View>
+
+              {/* View Todays Sold Item List Button */}
+              <TouchableOpacity
+                style={styles.viewSoldBtn}
+                onPress={handleViewTodaysSoldItems}
+                activeOpacity={0.8}
+              >
+                <View style={styles.viewSoldBtnLeft}>
+                  <TrendingUp size={18} color="#FFFFFF" />
+                  <Text style={styles.viewSoldBtnText}>View Today's Sold Item List</Text>
+                </View>
+                <ChevronDown size={16} color="#FFFFFF" style={{ transform: [{ rotate: "-90deg" }] }} />
+              </TouchableOpacity>
+
+              <View style={[styles.listHeaderTitleRow, { marginTop: 10 }]}>
+                <Text style={styles.sectionTitle}>Menu Catalog</Text>
+                <View style={styles.countBadge}>
+                  <Text style={styles.countBadgeText}>{foods.length} items loaded</Text>
+                </View>
+              </View>
+              <Text style={styles.sectionSubtitle}>
+                Manage menu listings, variants, pricing, and availability status.
+              </Text>
+
+              <View style={styles.searchContainer}>
+                <Search size={18} color={COLORS.textSecondary} style={styles.searchIcon} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search food by name..."
+                  placeholderTextColor={COLORS.textSecondary}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  returnKeyType="search"
+                  onSubmitEditing={() => Keyboard.dismiss()}
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity
+                    onPress={() => setSearchQuery("")}
+                    style={styles.clearSearchBtn}
+                  >
+                    <X size={16} color={COLORS.textSecondary} />
+                  </TouchableOpacity>
+                )}
               </View>
 
               {error ? (
                 <View style={styles.errorCard}>
-                  <CircleX size={18} color={COLORS.adminRed} />
+                  <CircleX size={20} color={COLORS.adminRed} />
                   <View style={styles.errorContent}>
                     <Text style={styles.errorTitle}>Error Loading Data</Text>
                     <Text style={styles.errorMessage}>{error}</Text>
                   </View>
-                  <TouchableOpacity onPress={fetchFoods} style={styles.retryButton}>
+                  <TouchableOpacity
+                    onPress={() => fetchFoods(1, false, debouncedSearch)}
+                    style={styles.retryButton}
+                  >
                     <Text style={styles.retryText}>Retry</Text>
                   </TouchableOpacity>
                 </View>
               ) : null}
 
-              {loading && !refreshing ? (
+              {loading && !refreshing && page === 1 ? (
                 <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="large" color={COLORS.primary} />
-                  <Text style={styles.loadingText}>Syncing menu catalog...</Text>
+                  <ActivityIndicator size="large" color={COLORS.text} />
+                  <Text style={styles.loadingText}>Loading menu catalog...</Text>
                 </View>
               ) : null}
 
               {!loading && !error && foods.length === 0 ? (
                 <View style={styles.emptyCard}>
                   <View style={styles.emptyIcon}>
-                    <UtensilsCrossed size={24} color={COLORS.primary} />
+                    <UtensilsCrossed size={28} color={COLORS.textSecondary} />
                   </View>
-                  <Text style={styles.emptyTitle}>No Foods Added</Text>
-                  <Text style={styles.emptyText}>Your menu catalog is currently empty.</Text>
+                  <Text style={styles.emptyTitle}>No Foods Found</Text>
+                  <Text style={styles.emptyText}>
+                    {searchQuery
+                      ? `No food items match "${searchQuery}"`
+                      : "Your menu catalog is currently empty."}
+                  </Text>
                 </View>
               ) : null}
             </View>
           }
-          ListFooterComponent={<View style={{ height: 40 }} />}
+          ListFooterComponent={
+            <View style={{ paddingVertical: 20 }}>
+              {loadingMore && (
+                <View style={styles.loadMoreIndicator}>
+                  <ActivityIndicator size="small" color={COLORS.text} />
+                  <Text style={styles.loadMoreText}>Loading more items...</Text>
+                </View>
+              )}
+            </View>
+          }
         />
       </View>
     </SafeAreaView>
@@ -488,7 +765,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingVertical: 16,
     backgroundColor: COLORS.primary,
   },
   headerLeft: {
@@ -496,86 +773,199 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   adminBadgeIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: "rgba(52, 211, 153, 0.12)",
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: "rgba(52, 211, 153, 0.15)",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
     borderWidth: 1,
-    borderColor: "rgba(52, 211, 153, 0.2)",
+    borderColor: "rgba(52, 211, 153, 0.3)",
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "700",
     color: "#FFFFFF",
     letterSpacing: 0.2,
   },
   headerSubtitle: {
-    fontSize: 12,
+    fontSize: 13,
     color: "#94A3B8",
     fontWeight: "400",
-    marginTop: 1,
+    marginTop: 2,
   },
   headerRefreshButton: {
-    width: 38,
-    height: 38,
+    width: 40,
+    height: 40,
     borderRadius: 12,
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: COLORS.primary,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.05)",
+    borderColor: COLORS.primary
   },
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 14,
-    paddingTop: 18,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    paddingTop: 20,
+    overflow: "hidden",
   },
-  columnWrapper: {
-    justifyContent: "space-between",
+  listContentContainer: {
+    paddingHorizontal: 16,
   },
   listHeader: {
+    marginBottom: 16,
+  },
+  statsContainer: {
+    flexDirection: "row",
+    gap: 12,
     marginBottom: 12,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: COLORS.text,
-    letterSpacing: -0.3,
-  },
-  sectionSubtitle: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    marginTop: 2,
-    marginBottom: 14,
-    fontWeight: "500",
-  },
-  foodCard: {
-    width: "48%",
+  statsCard: {
+    flex: 1,
     backgroundColor: COLORS.card,
-    borderRadius: 18,
-    marginBottom: 14,
+    borderRadius: 16,
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
     borderWidth: 1,
     borderColor: COLORS.border,
-    overflow: "hidden",
-    shadowColor: "#000",
+    shadowColor: "#64748B",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
-    shadowRadius: 8,
+    shadowRadius: 6,
     elevation: 2,
+  },
+  statsIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  statsInfo: {
+    flex: 1,
+  },
+  statsLabel: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    fontWeight: "600",
+  },
+  statsValue: {
+    fontSize: 15,
+    color: COLORS.text,
+    fontWeight: "800",
+    marginTop: 2,
+  },
+  viewSoldBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 16,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  viewSoldBtnLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  viewSoldBtnText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  listHeaderTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: COLORS.text,
+    letterSpacing: -0.4,
+  },
+  countBadge: {
+    backgroundColor: "#E2E8F0",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  countBadgeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: COLORS.textSecondary,
+  },
+  sectionSubtitle: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    marginTop: 4,
+    marginBottom: 14,
+    fontWeight: "400",
+  },
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    height: 48,
+    marginBottom: 16,
+    shadowColor: "#64748B",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: COLORS.text,
+    fontWeight: "500",
+  },
+  clearSearchBtn: {
+    padding: 4,
+  },
+  foodCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    shadowColor: "#64748B",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+    overflow: "hidden",
   },
   foodCardDeleting: {
     opacity: 0.5,
   },
+  foodCardInner: {
+    flexDirection: "column",
+  },
   foodImageContainer: {
     width: "100%",
-    height: 120,
-    backgroundColor: "#E2E8F0",
+    height: 180,
+    backgroundColor: "#F1F5F9",
     position: "relative",
   },
   foodImage: {
@@ -586,150 +976,152 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#EEF2F6",
-  },
-  categoryBadge: {
-    position: "absolute",
-    top: 8,
-    left: 8,
-    backgroundColor: "rgba(15, 23, 42, 0.75)",
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 6,
-    maxWidth: "70%",
-  },
-  categoryBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 9,
-    fontWeight: "600",
+    backgroundColor: "#E2E8F0",
   },
   availabilityBadge: {
     position: "absolute",
-    bottom: 8,
-    right: 8,
+    top: 12,
+    right: 12,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 8,
-    gap: 3,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    gap: 4,
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   availabilityText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "700",
   },
   foodContent: {
-    padding: 10,
+    padding: 16,
   },
-  foodTitleRow: {
+  foodHeaderRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
+    gap: 12,
   },
   foodName: {
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: "700",
     color: COLORS.text,
     flex: 1,
   },
-  description: {
-    fontSize: 10,
-    lineHeight: 14,
+  priceContainer: {
+    alignItems: "flex-end",
+  },
+  priceRow: {
+    alignItems: "flex-end",
+  },
+  normalPrice: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: COLORS.text,
+  },
+  discountPrice: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: COLORS.orange,
+  },
+  originalPrice: {
+    fontSize: 12,
+    fontWeight: "500",
     color: COLORS.textSecondary,
-    marginTop: 4,
+    textDecorationLine: "line-through",
+  },
+  description: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: COLORS.textSecondary,
+    marginTop: 6,
   },
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
     flexWrap: "wrap",
-    gap: 4,
-    marginTop: 8,
+    gap: 6,
+    marginTop: 12,
   },
   metaBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 3,
+    gap: 4,
     backgroundColor: "#F1F5F9",
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
   },
   metaText: {
-    fontSize: 9,
+    fontSize: 11,
     color: COLORS.textSecondary,
     fontWeight: "600",
   },
-  priceRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 8,
-    gap: 6,
-  },
-  normalPrice: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: COLORS.primary,
-  },
-  discountPrice: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: COLORS.orange,
-  },
-  originalPrice: {
-    fontSize: 10,
-    fontWeight: "500",
-    color: COLORS.textSecondary,
-    textDecorationLine: "line-through",
-  },
   variantsSection: {
-    marginTop: 10,
+    marginTop: 14,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: 10,
+    borderRadius: 12,
     overflow: "hidden",
-    backgroundColor: "#FAFAFA",
+    backgroundColor: "#F8FAFC",
   },
   variantHeader: {
-    paddingHorizontal: 8,
-    paddingVertical: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "#EEF2F6",
   },
   variantHeaderLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 8,
   },
   variantHeaderTitle: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
-    color: COLORS.primary,
+    color: COLORS.text,
   },
   variantHeaderCount: {
-    width: 15,
-    height: 15,
-    borderRadius: 8,
-    backgroundColor: COLORS.primary,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: COLORS.text,
     alignItems: "center",
     justifyContent: "center",
   },
   variantHeaderCountText: {
     color: "#FFFFFF",
-    fontSize: 8,
+    fontSize: 10,
     fontWeight: "700",
   },
+  variantHeaderRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  variantToggleText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: COLORS.textSecondary,
+  },
   variantList: {
-    padding: 6,
-    gap: 5,
+    padding: 8,
+    gap: 8,
   },
   variantCard: {
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: 8,
-    padding: 6,
+    borderRadius: 10,
+    padding: 10,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -738,18 +1130,18 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 8,
   },
   variantNumber: {
-    width: 18,
-    height: 18,
-    borderRadius: 5,
+    width: 22,
+    height: 22,
+    borderRadius: 6,
     backgroundColor: "#F1F5F9",
     alignItems: "center",
     justifyContent: "center",
   },
   variantNumberText: {
-    fontSize: 8,
+    fontSize: 10,
     fontWeight: "700",
     color: COLORS.textSecondary,
   },
@@ -757,134 +1149,167 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   variantName: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     color: COLORS.text,
   },
   variantPriceRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    marginTop: 1,
+    gap: 6,
+    marginTop: 2,
   },
   variantFinalPrice: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "800",
     color: COLORS.orange,
   },
   variantOriginalPrice: {
-    fontSize: 8,
+    fontSize: 10,
     color: COLORS.textSecondary,
     textDecorationLine: "line-through",
+  },
+  variantRightContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   variantAvailability: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 2,
-    paddingHorizontal: 4,
-    paddingVertical: 2,
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
     borderRadius: 6,
   },
   variantAvailabilityText: {
-    fontSize: 7,
+    fontSize: 9,
     fontWeight: "700",
   },
+  variantDeleteBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: "#FEF2F2",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.2)",
+  },
+  cardFooter: {
+    marginTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    paddingTop: 12,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+  },
   deleteButton: {
-    height: 32,
-    borderRadius: 8,
+    height: 38,
+    paddingHorizontal: 16,
+    borderRadius: 10,
     backgroundColor: "#FEF2F2",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
-    marginTop: 10,
+    gap: 6,
     borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.15)",
+    borderColor: "rgba(239, 68, 68, 0.2)",
   },
   deleteButtonText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     color: COLORS.adminRed,
   },
   loadingContainer: {
     backgroundColor: COLORS.card,
     borderRadius: 16,
-    paddingVertical: 30,
+    paddingVertical: 40,
     alignItems: "center",
     borderWidth: 1,
     borderColor: COLORS.border,
     marginBottom: 12,
   },
   loadingText: {
-    fontSize: 11,
+    fontSize: 13,
     color: COLORS.textSecondary,
     fontWeight: "500",
-    marginTop: 8,
+    marginTop: 10,
+  },
+  loadMoreIndicator: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 10,
+  },
+  loadMoreText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    fontWeight: "600",
   },
   emptyCard: {
     backgroundColor: COLORS.card,
     borderRadius: 16,
-    padding: 24,
+    padding: 32,
     alignItems: "center",
     borderWidth: 1,
     borderColor: COLORS.border,
     marginBottom: 12,
   },
   emptyIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 54,
+    height: 54,
+    borderRadius: 16,
     backgroundColor: "#F1F5F9",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 8,
+    marginBottom: 12,
   },
   emptyTitle: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: "700",
     color: COLORS.text,
+    marginBottom: 4,
   },
   emptyText: {
-    fontSize: 10,
+    fontSize: 13,
     color: COLORS.textSecondary,
     textAlign: "center",
-    marginTop: 2,
   },
   errorCard: {
-    backgroundColor: "#FEF2F2",
-    borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.2)",
-    borderRadius: 12,
-    padding: 10,
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: "#FEF2F2",
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.2)",
     marginBottom: 12,
+    gap: 10,
   },
   errorContent: {
     flex: 1,
-    marginLeft: 8,
   },
   errorTitle: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "700",
     color: COLORS.adminRed,
   },
   errorMessage: {
-    fontSize: 9,
-    color: "#9F1239",
-    marginTop: 1,
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    marginTop: 2,
   },
   retryButton: {
-    backgroundColor: "#FFFFFF",
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.3)",
+    backgroundColor: COLORS.adminRed,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
   },
   retryText: {
-    fontSize: 9,
-    color: COLORS.adminRed,
+    color: "#FFFFFF",
+    fontSize: 12,
     fontWeight: "700",
   },
 });

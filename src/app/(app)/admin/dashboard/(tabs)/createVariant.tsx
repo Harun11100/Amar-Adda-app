@@ -198,7 +198,7 @@ export default function CreateFoodVariantScreen() {
         isAvailable: variant.isAvailable,
       }));
 
-      const response = await fetch(`${API_URL}/api/admin/food/addVariant`, {
+      const response = await fetch(`${API_URL}/api/admin/create-variants`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -535,11 +535,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.02,
-    shadowRadius: 3,
-    elevation: 1,
   },
   selectButtonSelected: {
     borderColor: COLORS.primary,

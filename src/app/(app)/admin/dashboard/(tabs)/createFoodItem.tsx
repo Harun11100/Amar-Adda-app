@@ -340,11 +340,6 @@ export default function CreateFoodItemScreen() {
         preparationTime: 15,
       };
 
-      console.log(
-        "Food item payload:",
-        payload
-      );
-
       const response = await fetch(
         `${API_URL}/api/admin/food/createFood`,
         {

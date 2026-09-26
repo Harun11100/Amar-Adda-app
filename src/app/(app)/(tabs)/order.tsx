@@ -122,7 +122,7 @@ export default function WaiterOrderFlowScreen() {
   // FALLBACK TABLES
   // ---------------------------------------------------------
   const createFallbackTables = (): Table[] => {
-    return Array.from({ length: 20 }, (_, index) => ({
+    return Array.from({ length: 25 }, (_, index) => ({
       id: String(index + 1),
       tableNumber: index + 1,
       name: `Table ${index + 1}`,

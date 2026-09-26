@@ -55,7 +55,6 @@ export default function StaffListScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
-  console.log(staffList, "staffList")
   /**
    * Fetch staff from backend
    */

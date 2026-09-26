@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
+  TextInput, // Added TextInput
 } from "react-native";
 import {
   DollarSign,
@@ -23,6 +24,7 @@ import {
   Clock,
   User,
   MapPin,
+  Search, // Added Search icon
 } from "lucide-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Constants from "expo-constants";
@@ -136,6 +138,9 @@ export default function CashierScreen() {
   const [selectedOrder, setSelectedOrder] = useState<CashierOrder | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [isPaymentModalVisible, setIsPaymentModalVisible] = useState(false);
+  
+  // Search query state for table number filtering
+  const [searchQuery, setSearchQuery] = useState("");
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -150,7 +155,7 @@ export default function CashierScreen() {
   // FETCH ORDERS
   // =======================================================
 
-  const fetchOrders = useCallback(async (isRefresh = false) => {
+  const fetchOrders = useCallback(async (isRefresh = false, isBackground = false) => {
     if (!API_URL) {
       setError("API URL is not configured.");
       setLoading(false);
@@ -160,12 +165,14 @@ export default function CashierScreen() {
 
     if (isRefresh) {
       setRefreshing(true);
-    } else {
+    } else if (!isBackground) {
       setLoading(true);
     }
 
     try {
-      setError("");
+      if (!isBackground) {
+        setError("");
+      }
 
       const response = await fetch(`${API_URL}/api/admin/order/getOrder`, {
         method: "GET",
@@ -202,7 +209,9 @@ export default function CashierScreen() {
       setOrders(unpaidOrders);
     } catch (err: any) {
       console.error("Cashier fetch orders error:", err);
-      setError(err?.message || "Unable to load orders.");
+      if (!isBackground) {
+        setError(err?.message || "Unable to load orders.");
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -210,11 +219,19 @@ export default function CashierScreen() {
   }, []);
 
   // =======================================================
-  // INITIAL LOAD
+  // INITIAL LOAD & AUTO-REFRESH (Every 15s)
   // =======================================================
 
   useEffect(() => {
     fetchOrders();
+
+    // Set up interval for auto-refreshing every 15 seconds
+    const intervalId = setInterval(() => {
+      fetchOrders(false, true); // pass true for isBackground so it doesn't trigger loading spinners
+    }, 15000);
+
+    // Cleanup interval on component unmount
+    return () => clearInterval(intervalId);
   }, [fetchOrders]);
 
   // =======================================================
@@ -320,7 +337,7 @@ export default function CashierScreen() {
   };
 
   // =======================================================
-  // HELPERS
+  // HELPERS & FILTERING
   // =======================================================
 
   const getOrderLocation = (order: CashierOrder) => {
@@ -354,6 +371,15 @@ export default function CashierScreen() {
       minute: "2-digit",
     });
   };
+
+  // Filter orders based on table number matching the search query
+  const filteredOrders = orders.filter((order) => {
+    if (!searchQuery.trim()) return true;
+    if (!order.tableNumber) return false;
+    // Cleans table string to compare numbers easily (e.g. "Table 4" -> matches "4")
+    const cleanTableNum = order.tableNumber.replace(/^Table\s+/i, "").toLowerCase();
+    return cleanTableNum.includes(searchQuery.trim().toLowerCase());
+  });
 
   // =======================================================
   // LOADING UI
@@ -424,6 +450,24 @@ export default function CashierScreen() {
             />
           }
         >
+          {/* SEARCH BAR */}
+          <View style={styles.searchContainer}>
+            <Search size={18} color="#9CA3AF" style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Filter by table number (e.g. 4)..."
+              placeholderTextColor="#9CA3AF"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              keyboardType="number-pad"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery("")}>
+                <X size={18} color="#9CA3AF" />
+              </TouchableOpacity>
+            )}
+          </View>
+
           {/* SECTION HEADER */}
           <View style={styles.sectionHeader}>
             <View>
@@ -435,38 +479,44 @@ export default function CashierScreen() {
 
             <View style={styles.pendingBadge}>
               <Clock size={14} color="#FF7A00" />
-              <Text style={styles.pendingBadgeText}>{orders.length} Pending</Text>
+              <Text style={styles.pendingBadgeText}>{filteredOrders.length} Pending</Text>
             </View>
           </View>
 
           {/* EMPTY */}
-          {orders.length === 0 ? (
+          {filteredOrders.length === 0 ? (
             <View style={styles.emptyContainer}>
               <View style={styles.emptyIcon}>
                 <DollarSign color="#FF7A00" size={36} />
               </View>
 
-              <Text style={styles.emptyText}>All bills are settled!</Text>
+              <Text style={styles.emptyText}>
+                {searchQuery ? "No bills found for this table" : "All bills are settled!"}
+              </Text>
               <Text style={styles.emptySubText}>
-                No completed unpaid orders are waiting for payment.
+                {searchQuery
+                  ? "Try searching for a different table number."
+                  : "No completed unpaid orders are waiting for payment."}
               </Text>
 
-              <TouchableOpacity
-                style={styles.refreshEmptyButton}
-                onPress={() => fetchOrders(true)}
-                disabled={refreshing}
-                activeOpacity={0.8}
-              >
-                {refreshing ? (
-                  <ActivityIndicator size="small" color="#0B3C29" />
-                ) : (
-                  <RefreshCw size={16} color="#0B3C29" />
-                )}
-                <Text style={styles.refreshEmptyText}>Refresh</Text>
-              </TouchableOpacity>
+              {!searchQuery && (
+                <TouchableOpacity
+                  style={styles.refreshEmptyButton}
+                  onPress={() => fetchOrders(true)}
+                  disabled={refreshing}
+                  activeOpacity={0.8}
+                >
+                  {refreshing ? (
+                    <ActivityIndicator size="small" color="#0B3C29" />
+                  ) : (
+                    <RefreshCw size={16} color="#0B3C29" />
+                  )}
+                  <Text style={styles.refreshEmptyText}>Refresh</Text>
+                </TouchableOpacity>
+              )}
             </View>
           ) : (
-            orders.map((order) => (
+            filteredOrders.map((order) => (
               <View key={order._id} style={styles.billCard}>
                 {/* TOP */}
                 <View style={styles.billTopRow}>
@@ -832,7 +882,7 @@ export default function CashierScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0B3C29", // Matches header background for the top notch area
+    backgroundColor: "#0B3C29",
   },
   safeAreaHeader: {
     backgroundColor: "#0B3C29",
@@ -935,6 +985,31 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     padding: 16,
+  },
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: "#1F2937",
+    padding: 0,
   },
   sectionHeader: {
     flexDirection: "row",
@@ -1101,47 +1176,55 @@ const styles = StyleSheet.create({
   itemPreviewRow: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
   },
   itemPreviewText: {
     fontSize: 13,
     color: "#374151",
     flex: 1,
+    marginRight: 8,
   },
   itemPrice: {
     fontSize: 13,
-    color: "#374151",
-    fontWeight: "500",
+    fontWeight: "600",
+    color: "#1F2937",
   },
   variantText: {
     fontSize: 11,
     color: "#6B7280",
     marginLeft: 12,
+    marginTop: 2,
   },
   customizationText: {
     fontSize: 11,
     color: "#D97706",
     marginLeft: 12,
+    marginTop: 2,
   },
   notesBox: {
     backgroundColor: "#FFFBEB",
-    padding: 8,
     borderRadius: 6,
-    marginBottom: 10,
+    padding: 8,
+    marginTop: 6,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#FEF3C7",
   },
   notesLabel: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "700",
-    color: "#B45309",
+    color: "#D97706",
     marginBottom: 2,
   },
   notesText: {
     fontSize: 12,
-    color: "#92400E",
+    color: "#78350F",
   },
   summaryRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 10,
+    alignItems: "center",
+    marginBottom: 8,
   },
   summaryLabel: {
     fontSize: 13,
@@ -1149,23 +1232,23 @@ const styles = StyleSheet.create({
   },
   discountText: {
     fontSize: 13,
-    color: "#DC2626",
-    fontWeight: "500",
+    fontWeight: "600",
+    color: "#EF4444",
   },
   checkoutButton: {
-    backgroundColor: "#0B3C29",
     flexDirection: "row",
-    justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 12,
+    justifyContent: "center",
+    backgroundColor: "#0B3C29",
     borderRadius: 10,
+    paddingVertical: 12,
+    marginTop: 8,
   },
   checkoutButtonText: {
     color: "#FFF",
-    fontWeight: "600",
+    fontWeight: "700",
     fontSize: 14,
   },
-  // Modal Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -1175,43 +1258,40 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 40,
-    maxHeight: "90%",
+    maxHeight: "85%",
+    paddingBottom: 24,
   },
   modalHeader: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
+    justifyContent: "space-between",
+    padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: "#F3F4F6",
-    paddingBottom: 12,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#111827",
+    color: "#1F2937",
   },
   modalOrderNumber: {
-    fontSize: 12,
+    fontSize: 13,
     color: "#6B7280",
     marginTop: 2,
   },
   closeButton: {
     padding: 4,
-    backgroundColor: "#F3F4F6",
-    borderRadius: 20,
   },
   modalScrollContent: {
-    paddingBottom: 20,
+    padding: 20,
   },
   modalInfoCard: {
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#F9FAFB",
     borderRadius: 12,
     padding: 12,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
   },
   modalInfoRow: {
     flexDirection: "row",
@@ -1220,22 +1300,23 @@ const styles = StyleSheet.create({
   },
   modalInfoText: {
     fontSize: 13,
-    color: "#334155",
+    color: "#374151",
     marginLeft: 8,
+    fontWeight: "500",
   },
   receiptBox: {
-    backgroundColor: "#F9FAFB",
+    backgroundColor: "#FFF",
     borderRadius: 12,
-    padding: 14,
-    marginBottom: 20,
+    padding: 16,
     borderWidth: 1,
     borderColor: "#E5E7EB",
+    marginBottom: 20,
   },
   receiptSectionTitle: {
     fontSize: 14,
     fontWeight: "700",
     color: "#1F2937",
-    marginBottom: 10,
+    marginBottom: 12,
   },
   receiptItemContainer: {
     marginBottom: 8,
@@ -1243,36 +1324,38 @@ const styles = StyleSheet.create({
   receiptLine: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
   },
   receiptItemName: {
     fontSize: 13,
     color: "#374151",
-    fontWeight: "500",
     flex: 1,
   },
   receiptItemPrice: {
     fontSize: 13,
-    color: "#374151",
+    fontWeight: "600",
+    color: "#1F2937",
   },
   receiptVariant: {
     fontSize: 11,
     color: "#6B7280",
-    marginLeft: 8,
+    marginTop: 1,
   },
   receiptCustomization: {
     fontSize: 11,
     color: "#D97706",
-    marginLeft: 8,
+    marginTop: 1,
   },
   receiptDivider: {
     height: 1,
     backgroundColor: "#E5E7EB",
-    marginVertical: 10,
+    marginVertical: 12,
   },
   receiptSubRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 6,
+    alignItems: "center",
+    marginBottom: 8,
   },
   receiptLabel: {
     fontSize: 13,
@@ -1280,20 +1363,20 @@ const styles = StyleSheet.create({
   },
   receiptValue: {
     fontSize: 13,
-    color: "#1F2937",
+    color: "#374151",
     fontWeight: "500",
   },
   finalRow: {
-    marginTop: 6,
+    marginTop: 4,
     borderTopWidth: 1,
     borderTopColor: "#E5E7EB",
     paddingTop: 8,
     marginBottom: 0,
   },
   finalLabel: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
-    color: "#111827",
+    color: "#1F2937",
   },
   finalVal: {
     fontSize: 16,
@@ -1304,7 +1387,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     color: "#1F2937",
-    marginBottom: 10,
+    marginBottom: 12,
   },
   paymentMethodsRow: {
     flexDirection: "row",
@@ -1314,46 +1397,46 @@ const styles = StyleSheet.create({
   methodCard: {
     flex: 1,
     backgroundColor: "#F9FAFB",
-    borderWidth: 1.5,
-    borderColor: "#E5E7EB",
     borderRadius: 12,
-    paddingVertical: 12,
+    paddingVertical: 14,
     alignItems: "center",
     marginHorizontal: 4,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
   },
   methodCardActive: {
+    backgroundColor: "#FEF3C7",
     borderColor: "#FF7A00",
-    backgroundColor: "#FFF7ED",
   },
   methodText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
-    color: "#4B5563",
+    color: "#666",
     marginTop: 6,
   },
   methodTextActive: {
-    color: "#FF7A00",
+    color: "#D97706",
   },
   completePaymentBtn: {
-    backgroundColor: "#059669",
     flexDirection: "row",
-    justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 14,
+    justifyContent: "center",
+    backgroundColor: "#059669",
     borderRadius: 12,
+    paddingVertical: 14,
   },
   disabledButton: {
-    opacity: 0.7,
+    opacity: 0.6,
   },
   completePaymentText: {
     color: "#FFF",
-    fontSize: 15,
     fontWeight: "700",
+    fontSize: 15,
   },
   paymentConfirmationText: {
     textAlign: "center",
-    fontSize: 11,
-    color: "#9CA3AF",
+    fontSize: 12,
+    color: "#6B7280",
     marginTop: 10,
   },
 });

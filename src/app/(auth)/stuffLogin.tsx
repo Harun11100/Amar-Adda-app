@@ -141,8 +141,6 @@ export default function Login() {
       // --------------------------------------------------
       await loginStore(userData);
 
-      console.log("User logged in and saved via Zustand:", userData);
-
       // --------------------------------------------------
       // REDIRECT (RootLayout will handle this too based on state)
       // --------------------------------------------------

@@ -23,6 +23,7 @@ import {
   ArrowRight,
   RefreshCw,
   XCircle,
+  Trash2,
 } from "lucide-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Constants from "expo-constants";
@@ -209,7 +210,6 @@ export default function KitchenScreen() {
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
 
   // Retrieve user role dynamically from authStore
-  // (Change state.userRole or state.user?.role to match your store structure)
   const userRole = useAuthStore((state: any) => state.userRole || state.user?.role);
 
   // ==========================================================
@@ -233,7 +233,9 @@ export default function KitchenScreen() {
       if (refresh) {
         setIsRefreshing(true);
       } else {
-        setIsLoading(true);
+        if (orders.length === 0) {
+          setIsLoading(true);
+        }
       }
 
       try {
@@ -277,26 +279,26 @@ export default function KitchenScreen() {
           "Fetch kitchen orders error:",
           error
         );
-
-        Alert.alert(
-          "Unable to load orders",
-          error?.message ||
-            "Something went wrong while loading orders."
-        );
       } finally {
         setIsLoading(false);
         setIsRefreshing(false);
       }
     },
-    []
+    [orders.length]
   );
 
   // ==========================================================
-  // INITIAL LOAD
+  // INITIAL LOAD & AUTO-REFRESH (Every 10 seconds)
   // ==========================================================
 
   useEffect(() => {
     fetchOrders();
+
+    const intervalId = setInterval(() => {
+      fetchOrders(true);
+    }, 10000);
+
+    return () => clearInterval(intervalId);
   }, [fetchOrders]);
 
   // ==========================================================
@@ -317,21 +319,14 @@ export default function KitchenScreen() {
 
   const handleUpdateStatus = async (
     orderId: string,
-    currentStatus: OrderStatus
+    targetStatus: OrderStatus
   ) => {
-    // Check if user role is authorized (only 'chef' or 'admin')
     const normalizedRole = typeof userRole === "string" ? userRole.toLowerCase() : "";
     if (normalizedRole !== "chef" && normalizedRole !== "admin") {
       Alert.alert(
         "Access Denied",
         "Only chefs and administrators are authorized to update order statuses from the kitchen screen."
       );
-      return;
-    }
-
-    const nextStatus = getNextStatus(currentStatus);
-
-    if (!nextStatus) {
       return;
     }
 
@@ -357,7 +352,7 @@ export default function KitchenScreen() {
           },
           body: JSON.stringify({
             orderId,
-            orderStatus: nextStatus,
+            orderStatus: targetStatus,
           }),
         }
       );
@@ -389,7 +384,7 @@ export default function KitchenScreen() {
             order._id === orderId
               ? {
                   ...order,
-                  orderStatus: nextStatus,
+                  orderStatus: targetStatus,
                 }
               : order
           )
@@ -408,6 +403,100 @@ export default function KitchenScreen() {
     } finally {
       setUpdatingOrderId(null);
     }
+  };
+
+  // ==========================================================
+  // HANDLE CANCEL ORDER CONFIRMATION
+  // ==========================================================
+
+  const handleCancelOrder = (orderId: string) => {
+    Alert.alert(
+      "Cancel Order",
+      "Are you sure you want to cancel this pending order?",
+      [
+        {
+          text: "No",
+          style: "cancel",
+        },
+        {
+          text: "Yes, Cancel",
+          style: "destructive",
+          onPress: () => handleUpdateStatus(orderId, "cancelled"),
+        },
+      ]
+    );
+  };
+
+  // ==========================================================
+  // HANDLE DELETE CANCELLED ORDER (ADMIN ONLY)
+  // ==========================================================
+
+  const handleDeleteOrder = (orderId: string) => {
+    // Check if the user role is strictly 'admin'
+    const normalizedRole = typeof userRole === "string" ? userRole.toLowerCase() : "";
+    if (normalizedRole !== "admin") {
+      Alert.alert(
+        "Access Denied",
+        "Only administrators are authorized to delete cancelled orders."
+      );
+      return;
+    }
+
+    Alert.alert(
+      "Delete Order",
+      "Are you sure you want to permanently delete this cancelled order?",
+      [
+        {
+          text: "No",
+          style: "cancel",
+        },
+        {
+          text: "Yes, Delete",
+          style: "destructive",
+          onPress: async () => {
+            if (!API_URL) {
+              Alert.alert("Configuration Error", "API URL is not configured.");
+              return;
+            }
+
+            try {
+              setUpdatingOrderId(orderId);
+
+              const response = await fetch(
+                `${API_URL}/api/admin/order/cancelOrder`,
+                {
+                  method: "DELETE",
+                  headers: {
+                    Accept: "application/json",
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({ orderId }),
+                }
+              );
+
+              let data: any;
+              try {
+                data = await response.json();
+              } catch {
+                throw new Error("Server returned an invalid response.");
+              }
+
+              if (!response.ok || !data?.success) {
+                throw new Error(data?.message || "Failed to delete order.");
+              }
+
+              // Remove order locally from state
+              setOrders((prevOrders) => prevOrders.filter((o) => o._id !== orderId));
+            } catch (error: any) {
+              console.error("Delete order error:", error);
+              Alert.alert("Delete failed", error?.message || "Unable to delete order.");
+            } finally {
+              setUpdatingOrderId(null);
+            }
+          },
+        },
+      ]
+    );
   };
 
   // ==========================================================
@@ -604,6 +693,7 @@ export default function KitchenScreen() {
               statusColor = "#DC2626";
             }
 
+            const nextStatus = getNextStatus(order.orderStatus);
             const nextActionLabel = getNextActionLabel(order.orderStatus);
             const staffName = order.staffName || "Unknown";
             const isUpdating = updatingOrderId === order._id;
@@ -717,9 +807,28 @@ export default function KitchenScreen() {
 
                 {/* ACTION */}
                 {order.orderStatus === "cancelled" ? (
-                  <View style={styles.cancelledBanner}>
-                    <XCircle color="#DC2626" size={17} style={{ marginRight: 6 }} />
-                    <Text style={styles.cancelledText}>Order Cancelled</Text>
+                  <View style={styles.actionRow}>
+                    <View style={[styles.cancelledBanner, { flex: 1 }]}>
+                      <XCircle color="#DC2626" size={17} style={{ marginRight: 6 }} />
+                      <Text style={styles.cancelledText}>Order Cancelled</Text>
+                    </View>
+
+                    {/* Delete button (Admin-only access handled in function) */}
+                    <TouchableOpacity
+                      style={[
+                        styles.deleteButton,
+                        isUpdating && styles.actionButtonDisabled,
+                      ]}
+                      disabled={isUpdating}
+                      onPress={() => handleDeleteOrder(order._id)}
+                      activeOpacity={0.8}
+                    >
+                      {isUpdating ? (
+                        <ActivityIndicator color="#DC2626" size="small" />
+                      ) : (
+                        <Trash2 color="#DC2626" size={18} />
+                      )}
+                    </TouchableOpacity>
                   </View>
                 ) : order.orderStatus === "completed" ? (
                   <View style={styles.completedBanner}>
@@ -727,35 +836,55 @@ export default function KitchenScreen() {
                     <Text style={styles.completedText}>Order Completed</Text>
                   </View>
                 ) : (
-                  <TouchableOpacity
-                    style={[
-                      styles.actionButton,
-                      isUpdating && styles.actionButtonDisabled,
-                    ]}
-                    disabled={isUpdating}
-                    onPress={() =>
-                      handleUpdateStatus(
-                        order._id,
-                        order.orderStatus
-                      )
-                    }
-                    activeOpacity={0.8}
-                  >
-                    {isUpdating ? (
-                      <ActivityIndicator color="#FFFFFF" size="small" />
-                    ) : (
-                      <>
-                        <Text style={styles.actionButtonText}>
-                          {nextActionLabel}
-                        </Text>
-                        <ArrowRight
-                          color="#FFF"
-                          size={16}
-                          style={{ marginLeft: 6 }}
-                        />
-                      </>
+                  <View style={styles.actionRow}>
+                    {/* Cancel Button only for pending orders */}
+                    {order.orderStatus === "pending" && (
+                      <TouchableOpacity
+                        style={[
+                          styles.cancelButton,
+                          isUpdating && styles.actionButtonDisabled,
+                        ]}
+                        disabled={isUpdating}
+                        onPress={() => handleCancelOrder(order._id)}
+                        activeOpacity={0.8}
+                      >
+                        <XCircle color="#DC2626" size={15} style={{ marginRight: 4 }} />
+                        <Text style={styles.cancelButtonText}>Cancel</Text>
+                      </TouchableOpacity>
                     )}
-                  </TouchableOpacity>
+
+                    {/* Progress Action Button */}
+                    <TouchableOpacity
+                      style={[
+                        styles.actionButton,
+                        order.orderStatus === "pending" ? { flex: 2 } : { flex: 1 },
+                        isUpdating && styles.actionButtonDisabled,
+                      ]}
+                      disabled={isUpdating}
+                      onPress={() =>
+                        nextStatus && handleUpdateStatus(
+                          order._id,
+                          nextStatus
+                        )
+                      }
+                      activeOpacity={0.8}
+                    >
+                      {isUpdating ? (
+                        <ActivityIndicator color="#FFFFFF" size="small" />
+                      ) : (
+                        <>
+                          <Text style={styles.actionButtonText}>
+                            {nextActionLabel}
+                          </Text>
+                          <ArrowRight
+                            color="#FFF"
+                            size={16}
+                            style={{ marginLeft: 6 }}
+                          />
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
                 )}
               </View>
             );
@@ -1059,6 +1188,11 @@ const styles = StyleSheet.create({
     marginLeft: 6,
     flex: 1,
   },
+  actionRow: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+  },
   actionButton: {
     backgroundColor: "#FF7A00",
     flexDirection: "row",
@@ -1066,6 +1200,34 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: 10,
     borderRadius: 10,
+    flex: 1,
+  },
+  cancelButton: {
+    backgroundColor: "#FEE2E2",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+    flex: 1,
+  },
+  cancelButtonText: {
+    color: "#DC2626",
+    fontSize: 13,
+    fontWeight: "bold",
+  },
+  deleteButton: {
+    backgroundColor: "#FEE2E2",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
   },
   actionButtonDisabled: {
     opacity: 0.6,
@@ -1080,7 +1242,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#FEE2E2",
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderRadius: 10,
   },
   cancelledText: {
@@ -1093,7 +1255,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#E0F2FE",
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderRadius: 10,
   },
   completedText: {
