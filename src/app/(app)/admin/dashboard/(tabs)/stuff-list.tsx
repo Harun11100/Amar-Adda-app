@@ -143,9 +143,7 @@ const handleDeleteStaff = (staff: Staff) => {
                 }),
               }
             );
-
             const data = await response.json();
-
             if (!response.ok || !data.success) {
               throw new Error(
                 data?.message || "Failed to delete staff member."
@@ -154,7 +152,7 @@ const handleDeleteStaff = (staff: Staff) => {
 
             // Remove deleted staff from local state
             setStaffList((prevList) =>
-              prevList.filter((item) => item.id !== staff._id)
+              prevList.filter((item) => item._id !== staff.id)
             );
 
             Alert.alert(
