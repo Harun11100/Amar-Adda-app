@@ -154,7 +154,7 @@ const handleDeleteStaff = (staff: Staff) => {
 
             // Remove deleted staff from local state
             setStaffList((prevList) =>
-              prevList.filter((item) => item.id !== staff.id)
+              prevList.filter((item) => item.id !== staff._id)
             );
 
             Alert.alert(
